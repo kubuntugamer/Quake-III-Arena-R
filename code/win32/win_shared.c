@@ -116,3 +116,9 @@ char *Sys_DefaultInstallPath(void)
 	return Sys_Cwd();
 }
 
+
+/* io_uring file reads are Linux-only; Windows keeps the fread path */
+int Sys_UringHandleRead( void *file, void *buf, int len ) {
+	(void)file; (void)buf; (void)len;
+	return 0;
+}

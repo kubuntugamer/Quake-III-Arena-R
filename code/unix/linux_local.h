@@ -45,6 +45,9 @@ void VKimp_Shutdown( void );
 void Sys_GameModeStart( void );
 void Sys_GameModeEnd( void );
 
+/* io_uring file-read backend (linux_uring.c); nonzero = fully handled */
+int Sys_UringHandleRead( void *file, void *buf, int len );
+
 // bk001130 - win32
 // void IN_JoystickCommands (void);
 

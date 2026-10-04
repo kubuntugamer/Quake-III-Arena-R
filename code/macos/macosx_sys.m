@@ -538,3 +538,9 @@ unsigned int Sys_ProcessorCount()
     return _Sys_ProcessorCount;
 }
 
+
+/* io_uring file reads are Linux-only; macOS keeps the fread path */
+int Sys_UringHandleRead( void *file, void *buf, int len ) {
+	(void)file; (void)buf; (void)len;
+	return 0;
+}
