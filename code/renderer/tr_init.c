@@ -176,12 +176,8 @@ cvar_t* rt_denoiser;
 cvar_t* rt_brightness;
 cvar_t* rt_tonemapping_reinhard;
 
-void ( APIENTRY * qglMultiTexCoord2fARB )( GLenum texture, GLfloat s, GLfloat t );
-void ( APIENTRY * qglActiveTextureARB )( GLenum texture );
-void ( APIENTRY * qglClientActiveTextureARB )( GLenum texture );
-
-void ( APIENTRY * qglLockArraysEXT)( GLint, GLint);
-void ( APIENTRY * qglUnlockArraysEXT) ( void );
+/* qgl multitexture/compiled-array pointers are declared extern in qgl.h
+   and defined in the platform qgl layer (unix/linux_qgl.c) */
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral )
 {
@@ -475,7 +471,7 @@ static void InitVulkan(void)
 				// Top AS Buffer
 				VK_CreateRayTracingASBuffer(&vk_d.topASBuffer[i], 20 * VK_AS_MEMORY_ALLIGNMENT_SIZE);
 				// Per Instance Buffers
-				VK_CreateRayTracingBuffer(&vk_d.instanceBuffer[i], VK_MAX_BOTTOM_AS_INSTANCES * sizeof(VkGeometryInstanceNV));
+				VK_CreateRayTracingBuffer(&vk_d.instanceBuffer[i], VK_MAX_BOTTOM_AS_INSTANCES * sizeof(VkAccelerationStructureInstanceKHR));
 				VK_CreateAttributeBuffer(&vk_d.instanceDataBuffer[i], VK_MAX_BOTTOM_AS_INSTANCES * sizeof(ASInstanceData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 				// UBOs
 				VK_CreateUniformBuffer(&vk_d.uboBuffer[i], sizeof(GlobalUbo));
@@ -548,7 +544,7 @@ static void InitVulkan(void)
 						img[(j * bytes_per_channel) + 0] = *(pic + ((j * 8) + ((channel * bytes_per_channel) + 0)));
 						img[(j * bytes_per_channel) + 1] = *(pic + ((j * 8) + ((channel * bytes_per_channel) + 1)));
 					}
-					VK_UploadImageData(&vk_d.blueNoiseTex, width, height, &img, bytes_per_channel, 0, (i*4) + channel);
+					VK_UploadImageData(&vk_d.blueNoiseTex, width, height, img, bytes_per_channel, 0, (i*4) + channel);
 				}
 				ri.Free(pic);
 			}

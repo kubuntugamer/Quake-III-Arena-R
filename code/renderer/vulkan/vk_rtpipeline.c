@@ -102,26 +102,38 @@ static void VK_CreateRTXPipeline(vkrtpipeline_t* pipeline)
 static void VK_CreateRayTracingPipeline(vkrtpipeline_t* pipeline)
 {
 
-	VkRayTracingPipelineCreateInfoNV rayPipelineInfo = { 0 };
-	rayPipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
+	VkRayTracingPipelineCreateInfoKHR rayPipelineInfo = { 0 };
+	rayPipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
 	rayPipelineInfo.stageCount = pipeline->shader->size;
 	rayPipelineInfo.pStages = &pipeline->shader->shaderStageCreateInfos[0];
-	rayPipelineInfo.groupCount = pipeline->shader->shaderGroupSize;//sizeof(groups) / sizeof(VkRayTracingShaderGroupCreateInfoNV);
+	rayPipelineInfo.groupCount = pipeline->shader->shaderGroupSize;//sizeof(groups) / sizeof(VkRayTracingShaderGroupCreateInfoKHR);
 	rayPipelineInfo.pGroups = &pipeline->shader->shaderGroupCreateInfos[0];//&groups[0];
-	rayPipelineInfo.maxRecursionDepth = 5;
+	rayPipelineInfo.maxPipelineRayRecursionDepth = 5;
 	rayPipelineInfo.layout = pipeline->layout;
-	VK_CHECK(vkCreateRayTracingPipelinesNV(vk.device, VK_NULL_HANDLE, 1, &rayPipelineInfo, NULL, &pipeline->handle), " failed to create Ray Tracing Pipeline");
+	VK_CHECK(vkCreateRayTracingPipelinesKHR(vk.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayPipelineInfo, NULL, &pipeline->handle), " failed to create Ray Tracing Pipeline");
+}
+
+static uint32_t VK_RayTracingSbtStride(void) {
+	const uint32_t handleSize = vk.rayTracingProperties.shaderGroupHandleSize;
+	const uint32_t baseAlignment = vk.rayTracingProperties.shaderGroupBaseAlignment;
+	return (handleSize + baseAlignment - 1) & ~(baseAlignment - 1);
 }
 
 static void VK_CreateShaderBindingTable(vkrtpipeline_t *pipeline) {
 
-	const uint32_t sbtSize = vk.rayTracingProperties.shaderGroupHandleSize * pipeline->shader->size;
+	const uint32_t handleSize = vk.rayTracingProperties.shaderGroupHandleSize;
+	const uint32_t stride = VK_RayTracingSbtStride();
+	const uint32_t groupCount = pipeline->shader->shaderGroupSize;
+	const uint32_t sbtSize = stride * groupCount;
 	VK_CreateShaderBindingTableBuffer(&pipeline->shaderBindingTableBuffer, sbtSize);
 
-	uint8_t* shaderHandleStorage = calloc(sbtSize, sizeof(uint8_t));
-	// Get shader identifiers
-	VK_CHECK(vkGetRayTracingShaderGroupHandlesNV(vk.device, pipeline->handle, 0, pipeline->shader->size, sbtSize, shaderHandleStorage), "failed to get shader handels");
-	VK_UploadBufferData(&pipeline->shaderBindingTableBuffer, (void*)shaderHandleStorage);
+	uint8_t* shaderHandleStorage = calloc(groupCount * handleSize, sizeof(uint8_t));
+	// Get shader identifiers (tightly packed)
+	VK_CHECK(vkGetRayTracingShaderGroupHandlesKHR(vk.device, pipeline->handle, 0, groupCount, groupCount * handleSize, shaderHandleStorage), "failed to get shader handles");
+	// Copy each handle to its aligned SBT slot
+	for (uint32_t i = 0; i < groupCount; i++) {
+		VK_UploadBufferDataOffset(&pipeline->shaderBindingTableBuffer, stride * i, handleSize, (void*)(shaderHandleStorage + handleSize * i));
+	}
 
 	VK_UnmapBuffer(&pipeline->shaderBindingTableBuffer);
 	free(shaderHandleStorage);
@@ -129,7 +141,7 @@ static void VK_CreateShaderBindingTable(vkrtpipeline_t *pipeline) {
 
 void VK_BindRayTracingDescriptorSet(vkrtpipeline_t *pipeline, vkdescriptor_t *descriptor) {
 	VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline->layout, 0, 1,
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline->layout, 0, 1,
 		&descriptor->set, 0, NULL);
 }
 
@@ -137,13 +149,13 @@ void VK_Bind2RayTracingDescriptorSets(vkrtpipeline_t* pipeline, vkdescriptor_t* 
 	VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
 
 	VkDescriptorSet sets[2] = { descriptor1->set, descriptor2->set };
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline->layout, 0, 2,
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline->layout, 0, 2,
 		&sets[0], 0, NULL);
 }
 
 void VK_BindRayTracingPipeline(vkrtpipeline_t *pipeline) {
 	VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline->handle);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline->handle);
 }
 
 void VK_SetRayTracingPushConstant(vkrtpipeline_t *pipeline, VkShaderStageFlags stage, uint32_t offset, uint32_t size, void* data)
@@ -155,16 +167,20 @@ void VK_SetRayTracingPushConstant(vkrtpipeline_t *pipeline, VkShaderStageFlags s
 void VK_TraceRays(vkrtpipeline_t* pipeline) {
 	VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
 
-	VkDeviceSize bindingOffsetRayGenShader = vk.rayTracingProperties.shaderGroupHandleSize * 0;
-	VkDeviceSize bindingOffsetMissShader = vk.rayTracingProperties.shaderGroupHandleSize * 1;
-	VkDeviceSize bindingOffsetHitShader = vk.rayTracingProperties.shaderGroupHandleSize * 2;
-	VkDeviceSize bindingStride = vk.rayTracingProperties.shaderGroupHandleSize;
+	const uint32_t stride = VK_RayTracingSbtStride();
+	const uint32_t groupCount = pipeline->shader->shaderGroupSize;
+	VkDeviceAddress sbtAddress = VK_GetBufferDeviceAddress(pipeline->shaderBindingTableBuffer.buffer);
 
-	// hitShaderBindingOffset + hitShaderBindingStride × ( instanceShaderBindingTableRecordOffset + geometryIndex × sbtRecordStride + sbtRecordOffset )
-	vkCmdTraceRaysNV(commandBuffer,
-		pipeline->shaderBindingTableBuffer.buffer, bindingOffsetRayGenShader,
-		pipeline->shaderBindingTableBuffer.buffer, 0, bindingStride,
-		pipeline->shaderBindingTableBuffer.buffer, 0, bindingStride,
-		VK_NULL_HANDLE, 0, 0,
+	// SBT layout mirrors the old NV walk: [rgen, miss..., hit...]
+	VkStridedDeviceAddressRegionKHR raygenShaderBindingTable = { sbtAddress + stride * 0, stride, stride };
+	VkStridedDeviceAddressRegionKHR missShaderBindingTable = { sbtAddress + stride * 1, stride, stride * (groupCount - 1) };
+	VkStridedDeviceAddressRegionKHR hitShaderBindingTable = { sbtAddress + stride * 2, stride, stride * (groupCount - 2) };
+	VkStridedDeviceAddressRegionKHR callableShaderBindingTable = { 0, 0, 0 };
+
+	vkCmdTraceRaysKHR(commandBuffer,
+		&raygenShaderBindingTable,
+		&missShaderBindingTable,
+		&hitShaderBindingTable,
+		&callableShaderBindingTable,
 		vk.swapchain.extent.width, vk.swapchain.extent.height, 1);
 }

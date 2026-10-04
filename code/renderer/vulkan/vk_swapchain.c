@@ -245,7 +245,7 @@ static void VK_CreateRenderPass()
 
 	dependency[1].srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency[1].dstSubpass = 0;
-	dependency[1].srcStageMask = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV;
+	dependency[1].srcStageMask = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
 	dependency[1].srcAccessMask = 0;
 	dependency[1].dstStageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
 	dependency[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -261,7 +261,7 @@ static void VK_CreateRenderPass()
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
 	renderPassInfo.dependencyCount = 1;
-	renderPassInfo.pDependencies = &dependency;
+	renderPassInfo.pDependencies = dependency;
 
 	VK_CHECK(vkCreateRenderPass(vk.device, &renderPassInfo, NULL, &vk.swapchain.renderpass), "failed to create RenderPass for Swapchain!");
 }

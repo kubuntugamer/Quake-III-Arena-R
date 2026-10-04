@@ -6,10 +6,10 @@ vkdata_t     vk_d;
 
 static const char* deviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
-		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-		VK_NV_RAY_TRACING_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-		VK_KHR_MAINTENANCE3_EXTENSION_NAME,
 #endif
 #ifndef NDEBUG
 		//VK_EXT_DEBUG_MARKER_EXTENSION_NAME,
@@ -132,7 +132,7 @@ static void VK_CreateInstance() {
 			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
 			.pEngineName = "q3pt",
 			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
-			.apiVersion = VK_API_VERSION_1_1,
+			.apiVersion = VK_API_VERSION_1_2,
 		};
 
 		VkInstanceCreateInfo desc = { 0 };
@@ -229,10 +229,14 @@ static void VK_PickPhysicalDevice()
 	// device properties
 	vkGetPhysicalDeviceProperties(vk.physicalDevice, &vk.deviceProperties);
 
-	// rtx properties
-	vk.rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+	// rtx properties (KHR)
+	vk.accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+	vk.accelProperties.pNext = NULL;
+	vk.rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+	vk.rayTracingProperties.pNext = NULL;
 	vk.deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-	vk.deviceProperties2.pNext = &vk.rayTracingProperties;
+	vk.deviceProperties2.pNext = &vk.accelProperties;
+	vk.accelProperties.pNext = &vk.rayTracingProperties;
 	vkGetPhysicalDeviceProperties2(vk.physicalDevice, &vk.deviceProperties2);
 
 	// device limits
@@ -275,9 +279,24 @@ static void VK_CreateLogicalDevice()
 	indexingFeatures.descriptorBindingVariableDescriptorCount = qtrue;
 	indexingFeatures.descriptorBindingPartiallyBound = qtrue;
 
+	VkPhysicalDeviceVulkan12Features vulkan12Features = { 0 };
+	vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	vulkan12Features.bufferDeviceAddress = qtrue;
+	vulkan12Features.pNext = &indexingFeatures;
+
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = { 0 };
+	accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	accelerationStructureFeatures.accelerationStructure = qtrue;
+	accelerationStructureFeatures.pNext = &vulkan12Features;
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = { 0 };
+	rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+	rayTracingPipelineFeatures.rayTracingPipeline = qtrue;
+	rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
+
 	VkPhysicalDeviceFeatures2 device_features = { 0 };
 	device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
-	device_features.pNext = &indexingFeatures;
+	device_features.pNext = &rayTracingPipelineFeatures;
 
 	VkDeviceCreateInfo desc = { 0 };
 	desc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -309,10 +328,10 @@ static void VK_SetupQueryPool() {
 	VkQueryPoolCreateInfo createInfo = {
 		VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
 		NULL,
-		NULL,
+		0,
 		VK_QUERY_TYPE_TIMESTAMP,
 		VK_MAX_SWAPCHAIN_SIZE * PROFILER_IN_FLIGHT,
-		NULL
+		0
 	};
 	VK_CHECK(vkCreateQueryPool(vk.device, &createInfo, NULL, &vk.queryPool), "failed to create queryPool!");
 }

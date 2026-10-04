@@ -57,7 +57,7 @@ static void* q3_stbi_realloc(void* p, size_t old_size, size_t new_size) {
 #define STBI_NO_GIF
 #include "stb_image.h"
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "stb_image_resize2.h"
+#include "stb_image_resize.h" // pinned submodule predates resize2; header is include-only here
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -1513,7 +1513,7 @@ static void LoadPNG16(const char* filename, byte** pic, int* width, int* height)
 	}
 
 	int components;
-	*pic = stbi_load_16_from_memory(fbuffer, len, width, height, &components, STBI_rgb_alpha);
+	*pic = (byte *)stbi_load_16_from_memory(fbuffer, len, width, height, &components, STBI_rgb_alpha);
 	if (*pic == NULL) {
 		ri.FS_FreeFile(fbuffer);
 		return;

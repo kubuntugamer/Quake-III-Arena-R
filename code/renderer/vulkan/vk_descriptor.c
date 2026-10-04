@@ -87,12 +87,12 @@ void VK_AddAccelerationStructure(vkdescriptor_t* descriptor, uint32_t binding, V
 	descriptor->data = realloc(descriptor->data, descriptor->size * sizeof(vkdescriptorData_t));
 
 	descriptor->bindings[descriptor->size - 1].binding = binding;
-	descriptor->bindings[descriptor->size - 1].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
+	descriptor->bindings[descriptor->size - 1].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 	descriptor->bindings[descriptor->size - 1].descriptorCount = 1;
 	descriptor->bindings[descriptor->size - 1].stageFlags = stage;
 	descriptor->bindings[descriptor->size - 1].pImmutableSamplers = NULL;
 
-	descriptor->data[descriptor->size - 1].descAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
+	descriptor->data[descriptor->size - 1].descAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 	descriptor->data[descriptor->size - 1].descAccelerationStructureInfo.pNext = VK_NULL_HANDLE;
 	descriptor->data[descriptor->size - 1].descAccelerationStructureInfo.accelerationStructureCount = 1;
 	descriptor->data[descriptor->size - 1].descAccelerationStructureInfo.pAccelerationStructures = VK_NULL_HANDLE;
@@ -145,11 +145,11 @@ void VK_SetUniformBuffer(vkdescriptor_t* descriptor, uint32_t binding, VkShaderS
 		}
 	}
 }
-void VK_SetAccelerationStructure(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkAccelerationStructureNV* as) {
+void VK_SetAccelerationStructure(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkAccelerationStructureKHR* as) {
 	for (int i = 0; i < descriptor->size; ++i) {
 		if (descriptor->bindings[i].binding == binding &&
 			descriptor->bindings[i].stageFlags == stage) {
-			descriptor->data[i].descAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
+			descriptor->data[i].descAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 			descriptor->data[i].descAccelerationStructureInfo.pAccelerationStructures = as;
 			descriptor->data[i].descAccelerationStructureInfo.accelerationStructureCount = 1;
 			return;
@@ -275,11 +275,11 @@ void VK_UpdateDescriptorSet(vkdescriptor_t* descriptor) {
 			descWrite[j].pBufferInfo = &descriptor->data[j].descBufferInfo;
 			assert(descriptor->data[j].descBufferInfo.buffer != NULL);
 			break;
-		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
 			descWrite[j].dstSet = descriptor->set;
 			descWrite[j].dstBinding = descriptor->bindings[j].binding;
 			descWrite[j].descriptorCount = 1;
-			descWrite[j].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
+			descWrite[j].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 			descWrite[j].pNext = &descriptor->data[j].descAccelerationStructureInfo;
 			assert(descriptor->data[j].descAccelerationStructureInfo.pAccelerationStructures != NULL);
 			break;

@@ -66,8 +66,25 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <X11/keysym.h>
 #include <X11/cursorfont.h>
 
-#include <X11/extensions/xf86dga.h>
-#include <X11/extensions/xf86vmode.h>
+/* XF86DGA removed: header no longer shipped by distros; DGA mouse path disabled below */
+/* XF86VidMode removed: headers not shipped without libxxf86vm-dev; stubbed below,
+   fullscreen mode-switching degrades to windowed, gamma unsupported */
+
+
+/* XF86VidMode compat stubs (headers/libs absent on modern minimal installs) */
+typedef struct { float red, green, blue; } XF86VidModeGamma;
+typedef struct { int hdisplay, vdisplay; } XF86VidModeModeInfo;
+static int XF86VidModeQueryVersion(void *dpy, int *major, int *minor) { (void)dpy; (void)major; (void)minor; return 0; }
+static int XF86VidModeGetAllModeLines(void *dpy, int scr, int *n, XF86VidModeModeInfo ***modes) { (void)dpy; (void)scr; (void)n; (void)modes; return 0; }
+static int XF86VidModeSwitchToMode(void *dpy, int scr, XF86VidModeModeInfo *mode) { (void)dpy; (void)scr; (void)mode; return 0; }
+static int XF86VidModeSetViewPort(void *dpy, int scr, int x, int y) { (void)dpy; (void)scr; (void)x; (void)y; return 0; }
+static int XF86VidModeGetGamma(void *dpy, int scr, XF86VidModeGamma *g) { (void)dpy; (void)scr; (void)g; return 0; }
+static int XF86VidModeSetGamma(void *dpy, int scr, XF86VidModeGamma *g) { (void)dpy; (void)scr; (void)g; return 0; }
+
+/* XF86DGA compat stubs (library removed from modern Linux) */
+static int XF86DGAQueryVersion(void *dpy, int *major, int *minor) { (void)dpy; (void)major; (void)minor; return 0; }
+#define XF86DGADirectVideo(dpy, scr, en) ((void)0)
+#define XF86DGADirectMouse 0
 
 #define	WINDOW_CLASS_NAME	"Quake III: Arena"
 
@@ -1005,9 +1022,6 @@ int GLW_SetMode( const char *drivername, int mode, qboolean fullscreen )
   else
     colorbits = r_colorbits->value;
 
-  if ( !Q_stricmp( r_glDriver->string, _3DFX_DRIVER_NAME ) )
-    colorbits = 16;
-
   if (!r_depthbits->value)
     depthbits = 24;
   else
@@ -1386,7 +1400,6 @@ int qXErrorHandler(Display *dpy, XErrorEvent *ev)
 void GLimp_Init( void )
 {
   qboolean attemptedlibGL = qfalse;
-  qboolean attempted3Dfx = qfalse;
   qboolean success = qfalse;
   char  buf[1024];
   cvar_t *lastValidRenderer = ri.Cvar_Get( "r_lastValidRenderer", "(uninitialized)", CVAR_ARCHIVE );
@@ -1425,9 +1438,6 @@ void GLimp_Init( void )
     if ( !Q_stricmp( r_glDriver->string, OPENGL_DRIVER_NAME ) )
     {
       attemptedlibGL = qtrue;
-    } else if ( !Q_stricmp( r_glDriver->string, _3DFX_DRIVER_NAME ) )
-    {
-      attempted3Dfx = qtrue;
     }
 
     #if 0
@@ -1467,7 +1477,7 @@ void GLimp_Init( void )
   ri.Cvar_Set( "r_previousglDriver", r_glDriver->string );
 
   // This values force the UI to disable driver selection
-  glConfig.driverType = GLDRV_ICD;
+  glConfig.driverType = OPENGL;
   glConfig.hardwareType = GLHW_GENERIC;
 
   // get our config strings
@@ -1520,21 +1530,7 @@ void GLimp_Init( void )
   // this is where hardware specific workarounds that should be
   // detected/initialized every startup should go.
   //
-  if ( Q_stristr( buf, "banshee" ) || Q_stristr( buf, "Voodoo_Graphics" ) )
-  {
-    glConfig.hardwareType = GLHW_3DFX_2D3D;
-  } else if ( Q_stristr( buf, "rage pro" ) || Q_stristr( buf, "RagePro" ) )
-  {
-    glConfig.hardwareType = GLHW_RAGEPRO;
-  } else if ( Q_stristr( buf, "permedia2" ) )
-  {
-    glConfig.hardwareType = GLHW_PERMEDIA2;
-  } else if ( Q_stristr( buf, "riva 128" ) )
-  {
-    glConfig.hardwareType = GLHW_RIVA128;
-  } else if ( Q_stristr( buf, "riva tnt " ) )
-  {
-  }
+  /* 90s hardware workarounds removed: only GLHW_GENERIC exists anymore */
 
   ri.Cvar_Set( "r_lastValidRenderer", glConfig.renderer_string );
 
@@ -1745,8 +1741,7 @@ void IN_Frame (void) {
     // temporarily deactivate if not in the game and
     // running on the desktop
     // voodoo always counts as full screen
-    if (Cvar_VariableValue ("r_fullscreen") == 0
-        && strcmp( Cvar_VariableString("r_glDriver"), _3DFX_DRIVER_NAME ) )
+    if (Cvar_VariableValue ("r_fullscreen") == 0)
     {
       IN_DeactivateMouse ();
       return;

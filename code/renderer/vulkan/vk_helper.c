@@ -39,7 +39,7 @@ void VK_BeginRenderClear()
 	rpBeginInfo.renderArea.extent.width = vk.swapchain.extent.width;
 	rpBeginInfo.renderArea.extent.height = vk.swapchain.extent.height;
 	rpBeginInfo.clearValueCount = 2;//m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-	rpBeginInfo.pClearValues = &clearValues;
+	rpBeginInfo.pClearValues = clearValues;
 
 	VkCommandBuffer cmdBuf = vk.swapchain.CurrentCommandBuffer();
 
@@ -254,9 +254,16 @@ void VK_CreateBufferMemory(VkDeviceSize size, VkBufferUsageFlags usage,
 	vkGetBufferMemoryRequirements(vk.device, *buffer, &memReq);
 	//qDebug("allocating %u bytes for buffer", uint32_t(memReq.size));
 
+	// KHR ray tracing: buffers usable via vkGetBufferDeviceAddress need the flag
+	VkMemoryAllocateFlagsInfo allocFlagsInfo = { 0 };
+	allocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+	if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		allocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+	}
+
 	VkMemoryAllocateInfo memAllocInfo = {
 		VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		NULL,
+		&allocFlagsInfo,
 		memReq.size,
 		VK_FindMemoryTypeIndex(memReq.memoryTypeBits, properties)
 	};
@@ -352,15 +359,13 @@ uint32_t VK_DeviceLocalMemoryIndex()
 }
 
 /*
-* RTX MEMORY
+* RTX MEMORY (KHR)
 */
-void VK_GetAccelerationStructureMemoryRequirements(VkAccelerationStructureNV as, VkAccelerationStructureMemoryRequirementsTypeNV type, VkMemoryRequirements2 *memreq){
-	VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfoScratch = { 0 };
-	memoryRequirementsInfoScratch.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-	memoryRequirementsInfoScratch.accelerationStructure = as;
-	memoryRequirementsInfoScratch.type = type;
-	memreq->sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-	vkGetAccelerationStructureMemoryRequirementsNV(vk.device, &memoryRequirementsInfoScratch, memreq);
+VkDeviceAddress VK_GetBufferDeviceAddress(VkBuffer buffer) {
+	VkBufferDeviceAddressInfo addressInfo = { 0 };
+	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	addressInfo.buffer = buffer;
+	return vkGetBufferDeviceAddress(vk.device, &addressInfo);
 }
 
 /*

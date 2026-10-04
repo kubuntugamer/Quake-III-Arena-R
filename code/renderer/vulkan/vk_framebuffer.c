@@ -70,7 +70,7 @@ void VK_CreateFramebuffer(vkframebuffer_t* framebuffer, VkExtent2D extent, VkFor
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
 		renderPassInfo.dependencyCount = 1;
-		renderPassInfo.pDependencies = &dependency;
+		renderPassInfo.pDependencies = dependency;
 
 		VK_CHECK(vkCreateRenderPass(vk.device, &renderPassInfo, NULL, &framebuffer->renderPass), "failed to create Renderpass");
 	}
@@ -85,7 +85,7 @@ void VK_CreateFramebuffer(vkframebuffer_t* framebuffer, VkExtent2D extent, VkFor
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = framebuffer->renderPass;
 			framebufferInfo.attachmentCount = 2;
-			framebufferInfo.pAttachments = &attachments;
+			framebufferInfo.pAttachments = attachments;
 			framebufferInfo.width = extent.width;
 			framebufferInfo.height = extent.height;
 			framebufferInfo.layers = 1;
@@ -114,7 +114,7 @@ void VK_BeginFramebuffer(vkframebuffer_t* framebuffer) {
 	rpBeginInfo.renderArea.extent.width = framebuffer->extent.width;
 	rpBeginInfo.renderArea.extent.height = framebuffer->extent.height;
 	rpBeginInfo.clearValueCount = 2;
-	rpBeginInfo.pClearValues = &clearValues;
+	rpBeginInfo.pClearValues = clearValues;
 	vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 

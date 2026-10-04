@@ -284,20 +284,16 @@ typedef struct {
 
 // RTX
 // INSTANCE DATA BUFFER
+// NOTE: VkAccelerationStructureInstanceKHR has the same 64-byte layout the
+// old custom VkGeometryInstanceNV struct had (transform[12], customIndex+mask,
+// sbtRecordOffset+flags, deviceAddress), so instance upload code is unchanged.
 typedef struct {
-	float          transform[12];
-	uint32_t       instanceCustomIndex : 24;
-	uint32_t       mask : 8;
-	uint32_t       instanceOffset : 24;
-	uint32_t       flags : 8;
-	uint64_t       accelerationStructureHandle;
-} VkGeometryInstanceNV; // needed for top AS
-typedef struct {
-	VkAccelerationStructureNV		accelerationStructure;
-	uint64_t						handle;
-	VkGeometryNV					geometries;
+	VkAccelerationStructureKHR		accelerationStructure;
+	VkDeviceAddress					handle; // device address of the AS
+	VkAccelerationStructureGeometryKHR geometries;
+	uint32_t						indexCount; // for build primitiveCount = indexCount / 3
 	ASInstanceData					data;
-	VkGeometryInstanceNV			geometryInstance;
+	VkAccelerationStructureInstanceKHR geometryInstance;
 	VkDeviceSize					offset;			// offset in static or dynamic buffer
 	qboolean						isWorldSurface;	// just for entity bas which are from world surfaces
 	int c;
@@ -1012,7 +1008,7 @@ Vulkan
 #define VK_VERTEX_ATTRIBUTE_DATA_SIZE 512 * 1024
 #define VK_MAX_NUM_PIPELINES 128
 
-#define VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS (VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_COMPUTE_BIT)
+#define VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS (VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT)
 
 // RTX
 // the aligment size for AS buffers
@@ -1028,7 +1024,7 @@ typedef struct {
 	union {
 		VkDescriptorImageInfo*						descImageInfo;
 		VkDescriptorBufferInfo						descBufferInfo;
-		VkWriteDescriptorSetAccelerationStructureNV descAccelerationStructureInfo;
+		VkWriteDescriptorSetAccelerationStructureKHR descAccelerationStructureInfo;
 	};
 	uint32_t										size;
 	uint32_t										updateSize;
@@ -1055,7 +1051,7 @@ typedef struct {
     VkShaderStageFlagBits *flags;
     VkPipelineShaderStageCreateInfo *shaderStageCreateInfos;
 	size_t shaderGroupSize;
-	VkRayTracingShaderGroupCreateInfoNV* shaderGroupCreateInfos;
+	VkRayTracingShaderGroupCreateInfoKHR* shaderGroupCreateInfos;
 } vkshader_t;
 
 typedef struct {
@@ -1165,7 +1161,8 @@ typedef struct {
 
 	VkPhysicalDeviceProperties	deviceProperties;
 	VkPhysicalDeviceProperties2 deviceProperties2;
-	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
+	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties;
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingProperties;
 
 	vkqueueFamilyIndices_t		queryFamilyIndices;
 
@@ -1262,14 +1259,14 @@ typedef struct {
 
 typedef struct {
 	VkDeviceMemory memory;
-	VkAccelerationStructureNV accelerationStructure;
+	VkAccelerationStructureKHR accelerationStructure;
 	uint64_t handle;
 	uint32_t geometryCount;
 	
 } vkaccelerationStructure_t;
 
 typedef struct {
-	VkAccelerationStructureNV	accelerationStructure;
+	VkAccelerationStructureKHR	accelerationStructure;
 	uint64_t					handle;
 	VkDeviceSize				offset;
 } vktopAS_t;
@@ -1845,6 +1842,7 @@ qboolean VK_LoadDeviceFunctions( void );
 void VK_Setup( void *p1, void *p2 );
 void VK_Destroy( void );
 void VK_GetDeviceProperties( VkPhysicalDeviceProperties *devProperties );
+VkDeviceAddress VK_GetBufferDeviceAddress( VkBuffer buffer );
 
 #define VK_CHECK(function_call, msg) { \
 	VkResult result = function_call; \
@@ -1855,6 +1853,170 @@ void VK_GetDeviceProperties( VkPhysicalDeviceProperties *devProperties );
 swapChainSupportDetails_t querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 void	VK_SetDefaultState(void);
+
+// cross-TU prototypes (GCC 14+ treats implicit declarations as errors)
+void R_SetOpenGLApi(trApi_t* api);
+void R_SetVulkanApi(trApi_t *api);
+void VKimp_Init(void);
+void VKimp_Shutdown(void);
+void R_LoadImage16(const char* name, byte * *pic, int* width, int* height);
+void VK_DestroyCPipeline(vkcpipeline_t* pipeline);
+void VK_DestroyDescriptor(vkdescriptor_t* descriptor);
+void VK_DestroyAllPipelines();
+void VK_DestroyAllShaders();
+void RB_RayTraceScene(drawSurf_t* drawSurfs, int numDrawSurfs);
+void VK_AddSampler(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage);
+void VK_BeginFrame();
+void VK_BeginRenderClear();
+void VK_ClearAttachments(qboolean clear_depth, qboolean clear_stencil, qboolean clear_color, vec4_t color);
+void VK_CreateImage(vkimage_t* image, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels);
+void VK_CreateSampler(vkimage_t* image, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode);
+void VK_DestroyImage(vkimage_t* image);
+void VK_EndRender();
+void VK_EndFrame();
+void VK_FinishDescriptor(vkdescriptor_t* descriptor);
+void VK_SetSampler(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkSampler sampler, VkImageView imageView);
+void VK_SetSamplerPosition(vkdescriptor_t *descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkSampler sampler, VkImageView imageView, uint32_t pos);
+void VK_UpdateDescriptorSet(vkdescriptor_t *descriptor);
+void VK_UploadMipImageData(vkimage_t* image, uint32_t width, uint32_t height, const uint8_t* pixels, uint32_t bytes_per_pixel, uint32_t mipLevel);
+void VK_UploadImageData(vkimage_t* image, uint32_t width, uint32_t height, const uint8_t* pixels, uint32_t bytes_per_pixel, uint32_t mipLevel, uint32_t arrayLayer);
+void VK_TransitionImage(vkimage_t* image, VkImageLayout oldLayout, VkImageLayout newLayout);
+void VK_TextureMode(const char *string);
+void RB_CreateEntityBottomAS(vkbottomAS_t** bAS, qboolean dynamic);
+void VK_MakeTopAS(VkCommandBuffer commandBuffer, vktopAS_t* topAS, vkbuffer_t* topASBuffer, vkbottomAS_t* basList, uint32_t basCount, vkbuffer_t* instanceBuffer, VkBuildAccelerationStructureFlagsKHR flag);
+void VK_UpdateTopAS(VkCommandBuffer commandBuffer, vktopAS_t* topASold, vktopAS_t* topASnew, vkbuffer_t* topASBuffer, vkbottomAS_t* basList, uint32_t basCount, vkbuffer_t* instanceBuffer, VkBuildAccelerationStructureFlagsKHR flag);
+void VK_UploadBufferDataOffset(vkbuffer_t* buffer, VkDeviceSize offset, VkDeviceSize size, const byte* data);
+void VK_UploadBufferData(vkbuffer_t* buffer, const byte* data);
+void VK_DestroySwapchain();
+void VK_SetupSwapchain();
+void VK_CreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t *bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
+void VK_UpdateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* oldBas, vkbottomAS_t* newBas, vkbuffer_t* bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
+void VK_RecreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t* bottomASBuffer, VkBuildAccelerationStructureFlagsKHR flag);
+void VK_DestroyTopAccelerationStructure(vktopAS_t* as);
+void VK_DestroyBottomAccelerationStructure(vkbottomAS_t* as);
+void VK_DestroyAllAccelerationStructures();
+void VK_SetAccelerationStructure(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkAccelerationStructureKHR* as);
+VkCommandBuffer VK_BeginSingleTimeCommands(VkCommandBuffer *commandBuffer);
+void VK_EndSingleTimeCommands(VkCommandBuffer *commandBuffer);
+void VK_CreateImageArray(vkimage_t *image, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels, uint32_t arrayLayers);
+void VK_CreateRayTracingASBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize);
+void VK_CreateRayTracingBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize);
+void VK_CreateRayTracingScratchBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize);
+void VK_CreateShaderBindingTableBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize);
+void VK_CreateAttributeBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize, VkBufferUsageFlagBits usage);
+void VK_CreateUniformBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize);
+void VK_CreateVertexBuffer(vkbuffer_t *buffer, VkDeviceSize allocSize);
+void VK_CreateIndexBuffer(vkbuffer_t *buffer, VkDeviceSize allocSize);
+void VK_MapBuffer(vkbuffer_t* buffer);
+void VK_UnmapBuffer(vkbuffer_t* buffer);
+void VK_DestroyBuffer(vkbuffer_t* buffer);
+void VK_SetUpdateSize(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, uint32_t updateSize);
+void VK_AddSamplerCount(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, uint32_t count);
+void VK_FinishDescriptorWithoutUpdate(vkdescriptor_t* descriptor);
+void VK_AddStorageImage(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage);
+void VK_SetStorageImage(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkImageView imageView);
+void VK_AddStorageBuffer(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage);
+void VK_SetStorageBuffer(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkBuffer buffer);
+void VK_AddUniformBuffer(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage);
+void VK_SetUniformBuffer(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage, VkBuffer buffer);
+void VK_InitPipelines();
+void VK_TraceRays(vkrtpipeline_t* pipeline);
+void VK_BindRayTracingPipeline(vkrtpipeline_t *pipeline);
+void VK_BindRayTracingDescriptorSet(vkrtpipeline_t *pipeline, vkdescriptor_t *descriptor);
+void VK_Bind2RayTracingDescriptorSets(vkrtpipeline_t* pipeline, vkdescriptor_t* descriptor1, vkdescriptor_t* descriptor2);
+void VK_AddRayTracingPushConstant(vkrtpipeline_t* pipeline, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size);
+void VK_SetRayTracingDescriptorSet(vkrtpipeline_t *pipeline, vkdescriptor_t *descriptor);
+void VK_Set2RayTracingDescriptorSets(vkrtpipeline_t* pipeline, vkdescriptor_t* descriptor, vkdescriptor_t* descriptor2);
+void VK_SetRayTracingShader(vkrtpipeline_t *pipeline, vkshader_t *shader);
+void VK_FinishRayTracingPipeline(vkrtpipeline_t *pipeline);
+void VK_DestroyRayTracingPipeline(vkrtpipeline_t *pipeline);
+void RB_UploadIDX(vkbuffer_t* buffer, uint32_t offsetIDX, uint32_t offsetXYZ);
+void RB_UploadXYZ(vkbuffer_t* buffer, uint32_t offsetXYZ, int cluster);
+void RB_UploadCluster(vkbuffer_t* buffer, uint32_t offsetIDX, int defaultC);
+int RB_TryMergeCluster(int cluster[3], int defaultC);
+void VK_ReadPixelsScreen(qboolean alpha, byte* buffer);
+void VK_SetPerformanceMarker(VkCommandBuffer command_buffer, int index);
+void VK_ResetPerformanceQueryPool(VkCommandBuffer command_buffer);
+void VK_CreateBufferMemory(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
+void VK_CreateImageMemory(VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory* bufferMemory);
+#ifndef min
+#define min(a,b) (((a)<(b))?(a):(b))
+#endif
+#ifndef max
+#define max(a,b) (((a)>(b))?(a):(b))
+#endif
+void VK_AsvgfRngCompShader(vkshader_t* shader);
+void VK_AsvgfFwdCompShader(vkshader_t* shader);
+void VK_AsvgfGradCompShader(vkshader_t* shader);
+void VK_AsvgfGradAtrousCompShader(vkshader_t* shader);
+void VK_AsvgfTemporalCompShader(vkshader_t* shader);
+void VK_AsvgfTaaCompShader(vkshader_t* shader);
+void VK_AsvgfAtrousCompShader(vkshader_t* shader);
+void VK_AsvgfAtrousLFCompShader(vkshader_t* shader);
+void VK_CompositingCompShader(vkshader_t* shader);
+void VK_MaxMipMapCompShader(vkshader_t* shader);
+void VK_TonemappingCompShader(vkshader_t* shader);
+void VK_RTX_DirectIlluminationShader(vkshader_t* shader);
+void VK_RTX_IndirectIlluminationShader(vkshader_t* shader);
+void VK_RTX_PrimaryRayShader(vkshader_t* shader);
+void VK_RTX_ReflectRaysShader(vkshader_t* shader);
+void VK_SetComputeShader(vkcpipeline_t* pipeline, vkshader_t* shader);
+void VK_SetCompute2DescriptorSets(vkcpipeline_t* pipeline, vkdescriptor_t* descriptor, vkdescriptor_t* descriptor2);
+void VK_SetComputeDescriptorSet(vkcpipeline_t* pipeline, vkdescriptor_t* descriptor);
+void VK_FinishComputePipeline(vkcpipeline_t* pipeline);
+void VK_AddComputePushConstant(vkcpipeline_t* pipeline, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size);
+void VK_SetComputePushConstant(vkcpipeline_t* pipeline, VkShaderStageFlags stage, uint32_t offset, uint32_t size, void* data);
+void VK_AddAccelerationStructure(vkdescriptor_t* descriptor, uint32_t binding, VkShaderStageFlagBits stage);
+void VK_CreateCubeMap(vkimage_t* image, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels, uint32_t arrayLayers);
+int R_FindClusterForPos(const vec3_t p);
+int R_FindClusterForPos2(const vec3_t p);
+int R_FindClusterForPos3(const vec3_t p);
+void build_pvs2(world_t* world);
+void R_LoadImage(const char *name, byte **pic, int *width, int *height);
+uint32_t RB_GetMaterial();
+uint32_t RB_GetNextTexEncoded(int stage);
+void ComputeTexCoords(shaderStage_t *pStage);
+void ComputeColors(shaderStage_t *pStage);
+qboolean RB_ASDataDynamic(shader_t* shader);
+qboolean RB_ASDynamic(shader_t* shader);
+void myGlMultMatrix(const float *a, const float *b, float *out);
+qboolean myGLInvertMatrix(const float m[16], float invOut[16]);
+void VK_ClearImage(vkimage_t* image, VkClearColorValue cv, VkImageLayout layout);
+void VK_BindComputePipeline(vkcpipeline_t* pipeline);
+void VK_BindCompute2DescriptorSets(vkcpipeline_t* pipeline, vkdescriptor_t* descriptor1, vkdescriptor_t* descriptor2);
+void VK_Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+void VK_Bind(image_t *image);
+void R_SetupProjection(void);
+qboolean R_MirrorViewBySurface2(drawSurf_t* drawSurf, int entityNum);
+qboolean VK_FindPipeline();
+void VK_ClearAttachmentShader(vkshader_t* shader);
+void VK_SingleTextureShader(vkshader_t *shader);
+void VK_SetShader(vkpipeline_t *pipeline, vkshader_t *shader);
+void VK_AddBindingDescription(vkpipeline_t *pipeline, uint32_t binding, uint32_t stride, VkVertexInputRate inputRate);
+void VK_AddAttributeDescription(vkpipeline_t *pipeline, uint32_t location, uint32_t binding, VkFormat format, uint32_t offset);
+void VK_SetDescriptorSet(vkpipeline_t *pipeline, vkdescriptor_t *descriptor);
+void VK_AddPushConstant(vkpipeline_t *pipeline, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size);
+void VK_FinishPipeline(vkpipeline_t *pipeline);
+uint32_t VK_AddPipeline(vkpipeline_t* p);
+void VK_Bind1DescriptorSet(vkpipeline_t *pipeline, vkdescriptor_t *descriptor);
+void VK_SetPushConstant(vkpipeline_t *pipeline, VkShaderStageFlags stage, uint32_t offset, uint32_t size, void* data);
+void VK_BindPipeline(vkpipeline_t* pipeline);
+void VK_DrawIndexed(vkbuffer_t *idxBuffer, int count, uint32_t firstIndex, uint32_t vertexOffset);
+void VK_Draw(int count);
+uint32_t VK_FindMemoryTypeIndex(uint32_t memoryTypeBits, VkMemoryPropertyFlags properties);
+uint32_t VK_HostVisibleMemoryIndex();
+uint32_t VK_DeviceLocalMemoryIndex();
+void VK_BindIndexBuffer(vkbuffer_t *idxBuffer, VkDeviceSize offset);
+void VK_BindAttribBuffer(vkbuffer_t *attribBuffer, uint32_t binding, VkDeviceSize offset);
+qboolean VK_GetAttachmentClearPipelines(vkpipeline_t *pipeline, qboolean clearColor, qboolean clearDepth, qboolean clearStencil);
+void VK_FullscreenRectShader(vkshader_t* shader);
+void VK_DrawFullscreenRect(vkimage_t *image);
+void VK_PerformanceQueryPoolResults();
+void VK_TimeBetweenMarkers(double* ms, int start, int end);
+void VK_TexEnv(int env);
+qboolean RB_IsTransparent(shader_t* shader);
+qboolean RB_SkipObject(shader_t* shader);
+qboolean RB_IsLight(shader_t* shader);
 
 /*
 ** GL wrapper/helper functions

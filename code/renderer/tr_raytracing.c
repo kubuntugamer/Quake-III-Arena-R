@@ -5,8 +5,8 @@
 glConfig.driverType == VULKAN && r_vertexLight->value == 2
 */
 
-#define RTX_BOTTOM_AS_FLAG (VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV)
-#define RTX_TOP_AS_FLAG (VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV)
+#define RTX_BOTTOM_AS_FLAG (VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR)
+#define RTX_TOP_AS_FLAG (VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR)
 
 void RB_UploadCluster(vkbuffer_t* buffer, uint32_t offsetIDX, int defaultC) {
 	uint32_t* clusterData = calloc(tess.numIndexes/3, sizeof(uint32_t));
@@ -154,26 +154,24 @@ void RB_CreateEntityBottomAS(vkbottomAS_t** bAS, qboolean dynamic) {
 	if (!dynamic) bASList = &vk_d.bottomASList[vk_d.bottomASCount];
 	else bASList = &vk_d.bottomASDynamicList[vk.swapchain.currentImage][vk_d.bottomASDynamicCount[vk.swapchain.currentImage]];
 	//define AS geometry
-	Com_Memset(&bASList->geometries, 0, sizeof(VkGeometryNV));
-	bASList->geometries.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-	bASList->geometries.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
-	bASList->geometries.geometry.triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
-	bASList->geometries.geometry.triangles.vertexOffset = (*xyzOffset) * sizeof(VertexBuffer);
-	bASList->geometries.geometry.triangles.vertexCount = tess.numVertexes;
+	Com_Memset(&bASList->geometries, 0, sizeof(VkAccelerationStructureGeometryKHR));
+	bASList->geometries.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	bASList->geometries.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+	bASList->geometries.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+	bASList->geometries.geometry.triangles.maxVertex = tess.numVertexes;
 	bASList->geometries.geometry.triangles.vertexStride = sizeof(VertexBuffer);
 	if (!dynamic) {
-		bASList->geometries.geometry.triangles.vertexData = vk_d.geometry.xyz_entity_static.buffer;
-		bASList->geometries.geometry.triangles.indexData = vk_d.geometry.idx_entity_static.buffer;
+		bASList->geometries.geometry.triangles.vertexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.xyz_entity_static.buffer) + ((*xyzOffset) * sizeof(VertexBuffer));
+		bASList->geometries.geometry.triangles.indexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.idx_entity_static.buffer) + (0);
 	}
 	else {
-		bASList->geometries.geometry.triangles.vertexData = vk_d.geometry.xyz_entity_dynamic[vk.swapchain.currentImage].buffer;
-		bASList->geometries.geometry.triangles.indexData = vk_d.geometry.idx_entity_dynamic[vk.swapchain.currentImage].buffer;
+		bASList->geometries.geometry.triangles.vertexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.xyz_entity_dynamic[vk.swapchain.currentImage].buffer) + (0);
+		bASList->geometries.geometry.triangles.indexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.idx_entity_dynamic[vk.swapchain.currentImage].buffer) + (0);
 	}
-	bASList->geometries.geometry.triangles.indexOffset = (*idxOffset) * sizeof(uint32_t);
-	bASList->geometries.geometry.triangles.indexCount = tess.numIndexes;
+	bASList->indexCount = tess.numIndexes;
 	bASList->geometries.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+	bASList->geometries.geometry.triangles.transformData.deviceAddress = 0;
 	bASList->geometries.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-	bASList->geometries.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
 	bASList->geometries.flags = 0;
 
 	if (strstr(tess.shader->name, "models/powerups/health/red")) {
@@ -260,35 +258,35 @@ void RB_UpdateInstanceBuffer(vkbottomAS_t* bAS) {
 	else bAS->geometryInstance.mask = RAY_FIRST_PERSON_MIRROR_OPAQUE_VISIBLE;
 
 	if (tess.shader->sort <= SS_OPAQUE) {
-		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_NV;
+		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
 	}
 	else {
-		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_NV;
+		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR;
 	}
 	if (strstr(tess.shader->name, "skel")) {
 		int x = 2;
-		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_NV;
+		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
 	}
 	if (strstr(tess.shader->name, "energy_grn1") || strstr(tess.shader->name, "teleportEffect") || strstr(tess.shader->name, "shotgun_laser") || strstr(tess.shader->name, "models/players/hunter/hunter_f")) {
-		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_NV;
-		bAS->geometryInstance.instanceOffset = 1;
+		bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR;
+		bAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 	}
 
 
 	switch (tess.shader->cullType) {
 		case CT_FRONT_SIDED:
-			bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_NV; break;
+			bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR; break;
 		case CT_BACK_SIDED:
 			bAS->geometryInstance.flags |= 0; break;
 		case CT_TWO_SIDED:
-			bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV; break;
+			bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR; break;
 	}
-	//bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV;
+	//bAS->geometryInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
-	bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV;
-	bAS->geometryInstance.accelerationStructureHandle = bAS->handle;
+	bAS->geometryInstance.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+	bAS->geometryInstance.accelerationStructureReference = bAS->handle;
 
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&bAS->geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&bAS->geometryInstance);
 }
 
 int pauseInFrames = 3;
@@ -316,7 +314,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.bottomASWorldStatic.data.prevInstanceID = vk_d.bottomASTraceListCount;
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldStatic.data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldStatic.geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldStatic.geometryInstance);
 	Com_Memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldStatic, sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;
 	// add static world trans
@@ -325,7 +323,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldStaticTrans.data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldStaticTrans.geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldStaticTrans.geometryInstance);
 	memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldStaticTrans, sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;*/
 	// add world with dynamic data
@@ -333,7 +331,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.bottomASWorldDynamicData.data.prevInstanceID = vk_d.bottomASTraceListCount;
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldDynamicData.data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldDynamicData.geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldDynamicData.geometryInstance);
 	Com_Memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldDynamicData, sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;
 	// add world with dynamic data trans
@@ -341,7 +339,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.bottomASWorldDynamicDataTrans.data.prevInstanceID = vk_d.bottomASTraceListCount;
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldDynamicDataTrans.data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldDynamicDataTrans.geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldDynamicDataTrans.geometryInstance);
 	Com_Memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldDynamicDataTrans, sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;
 	// update world with dynamic data
@@ -408,10 +406,10 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage].data.prevInstanceID = vk_d.bottomASTraceListCount;
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage].data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage].geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage].geometryInstance);
 	VK_UpdateBottomAS(vk.swapchain.CurrentCommandBuffer(), &vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage],
 		&vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage],
-		&vk_d.basBufferWorldDynamicAS, NULL, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV);
+		&vk_d.basBufferWorldDynamicAS[vk.swapchain.currentImage], NULL, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 	backEnd.refdef.floatTime = originalTime;
 	Com_Memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldDynamicAS[vk.swapchain.currentImage], sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;
@@ -420,10 +418,10 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage].data.prevInstanceID = vk_d.bottomASTraceListCount;
 	vk_d.prevToCurrInstance[vk_d.bottomASTraceListCount] = vk_d.bottomASTraceListCount;
 	VK_UploadBufferDataOffset(&vk_d.instanceDataBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(ASInstanceData), sizeof(ASInstanceData), (void*)&vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage].data);
-	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkGeometryInstanceNV), sizeof(VkGeometryInstanceNV), (void*)&vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage].geometryInstance);
+	VK_UploadBufferDataOffset(&vk_d.instanceBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceListCount * sizeof(VkAccelerationStructureInstanceKHR), sizeof(VkAccelerationStructureInstanceKHR), (void*)&vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage].geometryInstance);
 	VK_UpdateBottomAS(vk.swapchain.CurrentCommandBuffer(), &vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage],
 		&vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage],
-		&vk_d.basBufferWorldDynamicAS, NULL, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV);
+		&vk_d.basBufferWorldDynamicAS[vk.swapchain.currentImage], NULL, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 	backEnd.refdef.floatTime = originalTime;
 	Com_Memcpy(&vk_d.bottomASTraceList[vk_d.bottomASTraceListCount], &vk_d.bottomASWorldDynamicASTrans[vk.swapchain.currentImage], sizeof(vkbottomAS_t));
 	vk_d.bottomASTraceListCount++;
@@ -523,13 +521,13 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 				RB_CreateEntityBottomAS(&drawSurf->bAS, qtrue);
 				drawSurf->bAS->data.type = BAS_ENTITY_DYNAMIC;
 				drawSurf->bAS->data.cluster = cluster;
-				drawSurf->bAS->geometryInstance.instanceOffset = 1;
+				drawSurf->bAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 
 				Com_Memcpy(&drawSurf->bAS->geometryInstance.transform, &tM, sizeof(float[12]));
 				Com_Memcpy(&drawSurf->bAS->data.modelmat, &tM, sizeof(float[12]));
 
 				if (RB_IsTransparent(tess.shader)) {
-					drawSurf->bAS->geometryInstance.instanceOffset = 1;
+					drawSurf->bAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 				}
 
 				RB_UpdateInstanceDataBuffer(drawSurf->bAS);
@@ -553,7 +551,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 				vk_d.geometry.xyz_entity_dynamic_offset += tess.numVertexes;
 
 				if (RB_IsTransparent(tess.shader)) {
-					drawSurf->bAS->geometryInstance.instanceOffset = 1;
+					drawSurf->bAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 				}
 
 				Com_Memcpy(&drawSurf->bAS->geometryInstance.transform, &tM, sizeof(float[12]));
@@ -590,13 +588,11 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 
 
 				if (RB_IsTransparent(tess.shader)) {
-					newAS->geometryInstance.instanceOffset = 1;
+					newAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 				}
 
-				newAS->geometries.geometry.triangles.indexOffset = newAS->data.offsetIDX * sizeof(uint32_t);
-				newAS->geometries.geometry.triangles.vertexOffset = newAS->data.offsetXYZ * sizeof(VertexBuffer);
-				newAS->geometries.geometry.triangles.indexData = vk_d.geometry.idx_entity_dynamic[vk.swapchain.currentImage].buffer;
-				newAS->geometries.geometry.triangles.vertexData = vk_d.geometry.xyz_entity_dynamic[vk.swapchain.currentImage].buffer;
+				newAS->geometries.geometry.triangles.indexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.idx_entity_dynamic[vk.swapchain.currentImage].buffer) + (newAS->data.offsetIDX * sizeof(uint32_t));
+				newAS->geometries.geometry.triangles.vertexData.deviceAddress = VK_GetBufferDeviceAddress(vk_d.geometry.xyz_entity_dynamic[vk.swapchain.currentImage].buffer) + (newAS->data.offsetXYZ * sizeof(VertexBuffer));
 
 				vk_d.geometry.idx_entity_dynamic_offset += tess.numIndexes;
 				vk_d.geometry.xyz_entity_dynamic_offset += tess.numVertexes;
@@ -631,7 +627,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 				Com_Memcpy(&drawSurf->bAS->data.modelmat, &tM, sizeof(float[12]));
 
 				if (RB_IsTransparent(tess.shader)) {
-					drawSurf->bAS->geometryInstance.instanceOffset = 1;
+					drawSurf->bAS->geometryInstance.instanceShaderBindingTableRecordOffset = 1;
 				}
 		
 				drawSurf->bAS->data.currInstanceID = vk_d.bottomASTraceListCount;
@@ -693,7 +689,7 @@ static void RB_UpdateRayTraceAS(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	VK_UploadBufferDataOffset(&vk_d.prevToCurrInstanceBuffer[vk.swapchain.currentImage], 0, sizeof(vk_d.prevToCurrInstance), (void*)vk_d.prevToCurrInstance);
 
 	VK_DestroyTopAccelerationStructure(&vk_d.topAS[vk.swapchain.currentImage]);
-	VK_MakeTopAS(vk.swapchain.CurrentCommandBuffer(), &vk_d.topAS[vk.swapchain.currentImage], &vk_d.topASBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceList, vk_d.bottomASTraceListCount, vk_d.instanceBuffer[vk.swapchain.currentImage], RTX_TOP_AS_FLAG);
+	VK_MakeTopAS(vk.swapchain.CurrentCommandBuffer(), &vk_d.topAS[vk.swapchain.currentImage], &vk_d.topASBuffer[vk.swapchain.currentImage], vk_d.bottomASTraceList, vk_d.bottomASTraceListCount, &vk_d.instanceBuffer[vk.swapchain.currentImage], RTX_TOP_AS_FLAG);
 
 
 	tess.numIndexes = 0;
@@ -813,15 +809,15 @@ static void RB_TraceRays() {
 
 	float viewMatrix[16];
 	// viewMatrix (needs flip)
-	RB_BuildViewMatrix(&viewMatrix, &origin, &backEnd.viewParms. or .axis);
+	RB_BuildViewMatrix(viewMatrix, origin, backEnd.viewParms. or .axis);
 	// flip view matrix for vulkan
-	myGlMultMatrix(&viewMatrix, &s_flipMatrix, &ubo->viewMat);
+	myGlMultMatrix(viewMatrix, s_flipMatrix, ubo->viewMat);
 	// inverse view matrix
-	myGLInvertMatrix(&ubo->viewMat, &ubo->inverseViewMat);
+	myGLInvertMatrix(ubo->viewMat, ubo->inverseViewMat);
 	// projection matrix
-	RB_BuildProjMatrix(&ubo->projMat, backEnd.viewParms.projectionMatrix, backEnd.viewParms.zFar);
+	RB_BuildProjMatrix(ubo->projMat, backEnd.viewParms.projectionMatrix, backEnd.viewParms.zFar);
 	// inverse proj matrix
-	myGLInvertMatrix(&ubo->projMat, &ubo->inverseProjMat);
+	myGLInvertMatrix(ubo->projMat, ubo->inverseProjMat);
 	
 	// view portal
 	vec3_t	originPortal;	// portal position
@@ -833,19 +829,19 @@ static void RB_TraceRays() {
 		float	projMatrixPortal[16];
 
 		// portal inv view mat
-		RB_BuildViewMatrix(&viewMatrixPortal, &originPortal, &vk_d.portalViewParms. or .axis);
-		myGlMultMatrix(&viewMatrixPortal, &s_flipMatrix, &viewMatrixFlippedPortal);
-		myGLInvertMatrix(&viewMatrixFlippedPortal, &ubo->inverseViewMatPortal);
+		RB_BuildViewMatrix(viewMatrixPortal, originPortal, vk_d.portalViewParms. or .axis);
+		myGlMultMatrix(viewMatrixPortal, s_flipMatrix, viewMatrixFlippedPortal);
+		myGLInvertMatrix(viewMatrixFlippedPortal, ubo->inverseViewMatPortal);
 		// portal inv proj mat
-		RB_BuildProjMatrix(&projMatrixPortal, vk_d.portalViewParms.projectionMatrix, vk_d.portalViewParms.zFar);
-		myGLInvertMatrix(&projMatrixPortal, &ubo->inverseProjMatPortal);
+		RB_BuildProjMatrix(projMatrixPortal, vk_d.portalViewParms.projectionMatrix, vk_d.portalViewParms.zFar);
+		myGLInvertMatrix(projMatrixPortal, ubo->inverseProjMatPortal);
 	}
 	ubo->hasPortal = vk_d.portalInView;
 	// mvp
 	myGlMultMatrix(&ubo->viewMat[0], ubo->projMat, vk_d.mvp);
 	VK_UploadBufferDataOffset(&vk_d.uboBuffer[vk.swapchain.currentImage], 0, sizeof(GlobalUbo), (void*)ubo);
 
-	VK_SetAccelerationStructure(&vk_d.rtxDescriptor[vk.swapchain.currentImage], BINDING_OFFSET_AS, VK_SHADER_STAGE_RAYGEN_BIT_NV, &vk_d.topAS[vk.swapchain.currentImage].accelerationStructure);
+	VK_SetAccelerationStructure(&vk_d.rtxDescriptor[vk.swapchain.currentImage], BINDING_OFFSET_AS, VK_SHADER_STAGE_RAYGEN_BIT_KHR, &vk_d.topAS[vk.swapchain.currentImage].accelerationStructure);
 	VK_UpdateDescriptorSet(&vk_d.rtxDescriptor[vk.swapchain.currentImage]);
 	
 	VK_ClearImage(&vk_d.asvgf[vk.swapchain.currentImage].gradSamplePos, (VkClearColorValue) { .uint32 = { 0, 0, 0, 0 } }, VK_IMAGE_LAYOUT_GENERAL);// VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -1050,7 +1046,7 @@ static void drawCluster() {
 		//if (i != 1333) continue;
 		uint32_t offset = vertexCount;
 		for (uint32_t idx = 0; idx < 8; idx++) {
-			get_aabb_corner(vk_d.clusterList[i].mins, vk_d.clusterList[i].maxs, idx, &points[idx]);
+			get_aabb_corner(vk_d.clusterList[i].mins, vk_d.clusterList[i].maxs, idx, points[idx]);
 			Com_Memcpy(&colors[vertexCount + idx], &color, sizeof(color4ub_t));
 		}
 		Com_Memcpy(&xyz[vertexCount], &points[0], 8 * sizeof(vec4_t));
@@ -1116,9 +1112,9 @@ void RB_RayTraceScene(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	RB_TraceRays();
 
 	memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV| VK_ACCESS_MEMORY_WRITE_BIT;
+	memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR| VK_ACCESS_MEMORY_WRITE_BIT;
 	memoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-	vkCmdPipelineBarrier(vk.swapchain.CurrentCommandBuffer(), VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 1, &memoryBarrier, 0, 0, 0, 0);
+	vkCmdPipelineBarrier(vk.swapchain.CurrentCommandBuffer(), VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 1, &memoryBarrier, 0, 0, 0, 0);
 
 	vk_d.portalInView = qfalse;
 	vk_d.mirrorInView = qfalse;

@@ -307,7 +307,7 @@ static void R_AddWorldSurface( msurface_t *surf, int dlightBits ) {
 			R_SetupProjection();
 			int index = (tr.refdef.numDrawSurfs-1) & DRAWSURF_MASK;
 			int entityNum = ((tr.refdef.drawSurfs[index].sort) >> QSORT_ENTITYNUM_SHIFT) & 1023;
-			R_MirrorViewBySurface2(tr.refdef.drawSurfs[index], entityNum);
+			R_MirrorViewBySurface2(&tr.refdef.drawSurfs[index], entityNum);
 		}
 	}
 }
