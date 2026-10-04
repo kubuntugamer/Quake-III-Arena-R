@@ -16,6 +16,7 @@
 #include <linux/io_uring.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -225,6 +226,31 @@ int Sys_UringHandleRead(void *vf, void *buf, int len) {
 static unsigned async_inflight;
 static unsigned long long async_next_tag = 1;
 
+/* prefetch slot state (shared so Sys_UringCollect can free completions) */
+#define URING_PF_SLOTS 4
+#define URING_PF_SIZE  (16 * 1024)
+
+struct uring_pf_slot_s {
+	void *buf;
+	unsigned long long tag;
+	int pending;
+};
+
+static struct uring_pf_slot_s pf_slots[URING_PF_SLOTS];
+static unsigned long long pf_next_tag = 1;
+
+/* scan pending pf slots; on each reaped completion free any matching one */
+static void Sys_UringReapPfSlots(const unsigned long long *tags, int n) {
+	int i, j;
+	for (j = 0; j < n; j++) {
+		for (i = 0; i < URING_PF_SLOTS; i++) {
+			if (pf_slots[i].pending && pf_slots[i].tag == tags[j]) {
+				pf_slots[i].pending = 0;
+			}
+		}
+	}
+}
+
 /*
 ================
 Sys_UringReadAsync
@@ -310,6 +336,11 @@ int Sys_UringCollect(int block, unsigned long long *tags, long *results, int max
 		if (async_inflight > 0) {
 			async_inflight--;
 		}
+		for (int k = 0; k < URING_PF_SLOTS; k++) {
+			if (pf_slots[k].pending && pf_slots[k].tag == (unsigned long long)cqe->user_data) {
+				pf_slots[k].pending = 0;
+			}
+		}
 	}
 	uring_store_release(uring.cq_head, head);
 	return collected;
@@ -381,4 +412,77 @@ int Sys_UringHandleReadAsync(void *vf, void *buf, int len) {
 		}
 		/* our tag not in this drain; loop to wait for the rest */
 	}
+}
+
+/* ------------------------------------------------------------------
+   Stage 3: opt-in async read-ahead prefetch
+   ------------------------------------------------------------------
+   Sys_UringPrefetch() submits a non-blocking read from a file offset
+   into a small scratch backing-buffer (the pages are pulled into the
+   kernel page cache by the DMA, warming the next real read); it never
+   waits for completion itself.  Slot lifetime is governed by the
+   async-inflight accounting: Sys_UringCollect() frees any slot whose
+   tag it reaps.  A draining sync still applies to this struct, so the
+   buffer is guaranteed full before it is overwritten/reused.
+   ------------------------------------------------------------------ */
+
+static void Sys_UringEnsurePfBuffers(void) {
+	int i;
+	for (i = 0; i < URING_PF_SLOTS; i++) {
+		if (!pf_slots[i].buf) {
+			pf_slots[i].buf = malloc(URING_PF_SIZE);
+		}
+	}
+}
+
+
+/* Walk the pending slots once with non-blocking drains to clear space,
+   then submit *one* read-ahead.  Returns 1 on successful submission. */
+int Sys_UringPrefetch(void *vf, int len, long off) {
+	FILE *f = (FILE *)vf;
+	int fd, i;
+
+	if (len <= 0) {
+		return 1;
+	}
+	if (!Sys_UringInit()) {
+		return 0;
+	}
+	fd = fileno(f);
+	if (fd < 0) {
+		return 0;
+	}
+	Sys_UringEnsurePfBuffers();
+
+	for (i = 0; i < URING_PF_SLOTS; i++) {
+		if (pf_slots[i].pending) {
+			continue;
+		}
+		int toread = (len > URING_PF_SIZE) ? URING_PF_SIZE : len;
+		unsigned long long tag = ++pf_next_tag;
+		if (Sys_UringReadAsync(vf, pf_slots[i].buf, toread, off, tag)) {
+			pf_slots[i].tag = tag;
+			pf_slots[i].pending = 1;
+			return 1;
+		}
+	}
+
+	/* all slots busy: wait to reap at least one so the next call can use it */
+	unsigned long long rtags[URING_PF_SLOTS];
+	long rres[URING_PF_SLOTS];
+	int got = Sys_UringCollect(1, rtags, rres, URING_PF_SLOTS);
+	Sys_UringReapPfSlots(rtags, got);
+	return 0;
+}
+
+/* Proactively reap any finished prefetches; safe to call opportunistically
+   (it never blocks).  Returns the total completions gathered this call. */
+int Sys_UringPrefetchPump(void) {
+	unsigned long long rtags[16];
+	long rres[16];
+	int got = Sys_UringCollect(0, rtags, rres, 16);
+	if (got > 0) {
+		Sys_UringReapPfSlots(rtags, got);
+	}
+	return got;
 }

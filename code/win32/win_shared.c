@@ -133,3 +133,9 @@ int Sys_UringCollect( int block, unsigned long long *tags, long *results, int ma
 int Sys_UringHandleReadAsync( void *file, void *buf, int len ) {
 	(void)file; (void)buf; (void)len; return 0;
 }
+int Sys_UringPrefetch( void *file, int len, long off ) {
+	(void)file; (void)len; (void)off; return 0;
+}
+int Sys_UringPrefetchPump( void ) {
+	return 0;
+}

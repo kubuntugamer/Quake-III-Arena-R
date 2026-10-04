@@ -1254,10 +1254,13 @@ int FS_Read2( void *buffer, int len, fileHandle_t f ) {
 
 int Sys_UringHandleRead( void *file, void *buf, int len );
 int Sys_UringHandleReadAsync( void *file, void *buf, int len );
+int Sys_UringPrefetch( void *file, int len, long off );
+int Sys_UringPrefetchPump( void );
 
 static qboolean fs_uringAnnounced = qfalse;
 static qboolean fs_uringAsyncAnnounced = qfalse;
 static cvar_t *fs_useUringAsync;
+static cvar_t *fs_useUringPrefetch;
 
 int FS_Read( void *buffer, int len, fileHandle_t f ) {
 	int		block, remaining;
@@ -1317,6 +1320,13 @@ int FS_Read( void *buffer, int len, fileHandle_t f ) {
 
 			remaining -= read;
 			buf += read;
+		}
+		if ( fs_useUringPrefetch && fs_useUringPrefetch->integer ) {
+			long poff = ftello( fsh[f].handleFiles.file.o );
+			if ( poff >= 0 ) {
+				Sys_UringPrefetch( fsh[f].handleFiles.file.o, 65536, poff );
+			}
+			Sys_UringPrefetchPump();
 		}
 		return len;
 	} else {
@@ -2773,6 +2783,7 @@ static void FS_Startup( const char *gameName ) {
 	fs_debug = Cvar_Get( "fs_debug", "0", 0 );
 	fs_useUring = Cvar_Get( "fs_useUring", "0", CVAR_ARCHIVE );
 	fs_useUringAsync = Cvar_Get( "fs_useUringAsync", "0", CVAR_ARCHIVE );
+	fs_useUringPrefetch = Cvar_Get( "fs_useUringPrefetch", "0", CVAR_ARCHIVE );
 	fs_copyfiles = Cvar_Get( "fs_copyfiles", "0", CVAR_INIT );
 	fs_cdpath = Cvar_Get ("fs_cdpath", Sys_DefaultCDPath(), CVAR_INIT );
 	fs_basepath = Cvar_Get ("fs_basepath", Sys_DefaultInstallPath(), CVAR_INIT );

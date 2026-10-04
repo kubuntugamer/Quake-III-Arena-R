@@ -51,6 +51,9 @@ int Sys_UringHandleRead( void *file, void *buf, int len );
 int Sys_UringReadAsync( void *file, void *buf, int len, long off, unsigned long long tag );
 int Sys_UringCollect( int block, unsigned long long *tags, long *results, int maxout );
 int Sys_UringHandleReadAsync( void *file, void *buf, int len );
+/* Stage 3 async read-ahead prefetch */
+int Sys_UringPrefetch( void *file, int len, long off );
+int Sys_UringPrefetchPump( void );
 
 // bk001130 - win32
 // void IN_JoystickCommands (void);
