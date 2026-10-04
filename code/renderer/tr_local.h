@@ -1287,10 +1287,12 @@ typedef struct {
 	vkcpipeline_t				compositingPipeline;
 	vkcpipeline_t				maxmipmapPipeline;
 	vkcpipeline_t				tonemappingPipeline;
+	vkcpipeline_t				fsrRcasPipeline; // FSR1 RCAS (native-res sharpen)
 	vkimage_t					rngImage;
 
 	vkimage_t					resultImage[VK_MAX_SWAPCHAIN_SIZE];
 	vkimage_t					accumulationImage[VK_MAX_SWAPCHAIN_SIZE];
+	vkimage_t					fsrImage[VK_MAX_SWAPCHAIN_SIZE]; // RCAS output (ping-pong of gBuffer.result)
 	vkimage_t					visData;
 	vkimage_t					lightVisData;
 	vkimage_t					lightVisData2;
@@ -1791,6 +1793,8 @@ extern  cvar_t  *rt_taa;
 extern	cvar_t  *rt_denoiser;
 extern  cvar_t  *rt_brightness;
 extern	cvar_t* rt_tonemapping_reinhard;
+extern	cvar_t* rt_fsr;
+extern	cvar_t* rt_fsrSharpness;
 
 extern  cvar_t* rt_printPerformanceStatistic;
 extern  cvar_t* rt_accumulate;
@@ -1960,6 +1964,7 @@ void VK_AsvgfAtrousLFCompShader(vkshader_t* shader);
 void VK_CompositingCompShader(vkshader_t* shader);
 void VK_MaxMipMapCompShader(vkshader_t* shader);
 void VK_TonemappingCompShader(vkshader_t* shader);
+void VK_FsrRcasCompShader(vkshader_t* shader);
 void VK_RTX_DirectIlluminationShader(vkshader_t* shader);
 void VK_RTX_IndirectIlluminationShader(vkshader_t* shader);
 void VK_RTX_PrimaryRayShader(vkshader_t* shader);
