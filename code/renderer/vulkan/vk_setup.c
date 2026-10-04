@@ -20,6 +20,10 @@ static const char* requiredDeviceExtensions[] = {
 static const char* optionalDeviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
 		VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
 		VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 		VK_KHR_PRESENT_ID_EXTENSION_NAME,
@@ -256,6 +260,9 @@ static void VK_CreateSurface(void* p1, void* p2) {
 
 static void VK_PickPhysicalDevice()
 {
+	VkPhysicalDevice nvidiaDevice = VK_NULL_HANDLE;
+	VkPhysicalDevice amdDevice = VK_NULL_HANDLE;
+
 	{
 		uint32_t deviceCount = 0;
 		vkEnumeratePhysicalDevices(vk.instance, &deviceCount, NULL);
@@ -265,11 +272,31 @@ static void VK_PickPhysicalDevice()
 		VkPhysicalDevice devices[10];
 		vkEnumeratePhysicalDevices(vk.instance, &deviceCount, &devices[0]);
 
+		// First pass: find NVIDIA (primary) and AMD (secondary) devices
 		for (int i = 0; i < deviceCount; i++) {
+			VkPhysicalDeviceProperties props;
+			vkGetPhysicalDeviceProperties(devices[i], &props);
 			if (VK_IsDeviceSuitable(devices[i], vk.surface)) {
-				vk.physicalDevice = devices[i];
-				break;
+				if (props.vendorID == 0x10DE && nvidiaDevice == VK_NULL_HANDLE) {
+					// NVIDIA - prefer as primary (graphics + present)
+					nvidiaDevice = devices[i];
+				} else if (props.vendorID == 0x1002 && amdDevice == VK_NULL_HANDLE) {
+					// AMD - use as secondary (compute)
+					amdDevice = devices[i];
+				} else if (vk.physicalDevice == VK_NULL_HANDLE) {
+					// Fallback: any suitable device
+					vk.physicalDevice = devices[i];
+				}
 			}
+		}
+
+		// Prefer NVIDIA as primary if available
+		if (nvidiaDevice != VK_NULL_HANDLE) {
+			vk.physicalDevice = nvidiaDevice;
+			vk.secondaryPhysicalDevice = amdDevice;
+		} else if (amdDevice != VK_NULL_HANDLE) {
+			vk.physicalDevice = amdDevice;
+			vk.secondaryPhysicalDevice = VK_NULL_HANDLE;
 		}
 	}
 
@@ -345,6 +372,7 @@ static void VK_CreateLogicalDevice()
 	VkPhysicalDeviceFeatures supportedFeatures = { 0 };
 	vkGetPhysicalDeviceFeatures(vk.physicalDevice, &supportedFeatures);
 	vk.anisotropy = supportedFeatures.samplerAnisotropy;
+// Build feature chain for device creation (reusable for primary and secondary)
 	VkPhysicalDeviceFeatures deviceFeatures = { 0 };
 	deviceFeatures.fillModeNonSolid = qtrue;
 	deviceFeatures.multiDrawIndirect = qfalse;
@@ -387,20 +415,73 @@ static void VK_CreateLogicalDevice()
 	device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
 	device_features.pNext = &presentWaitFeatures;
 
-	VkDeviceCreateInfo desc = { 0 };
-	desc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	desc.pNext = &device_features;
-	desc.queueCreateInfoCount = queueCreateInfosCount;
-	desc.pQueueCreateInfos = &queueCreateInfos[0];
+	VkDeviceCreateInfo primaryDesc = { 0 };
+	primaryDesc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	primaryDesc.pNext = &device_features;
+	primaryDesc.queueCreateInfoCount = queueCreateInfosCount;
+	primaryDesc.pQueueCreateInfos = &queueCreateInfos[0];
+	primaryDesc.pEnabledFeatures = &deviceFeatures;
+	primaryDesc.enabledExtensionCount = enabledDeviceExtensionCount;
+	primaryDesc.ppEnabledExtensionNames = &enabledDeviceExtensions[0];
 
-	desc.pEnabledFeatures = &deviceFeatures;
+	VK_CHECK(vkCreateDevice(vk.physicalDevice, &primaryDesc, NULL, &vk.device), "failed to create logical device!")
 
-	desc.enabledExtensionCount = enabledDeviceExtensionCount;
-	desc.ppEnabledExtensionNames = &enabledDeviceExtensions[0];
+	// Create secondary logical device for AMD iGPU if available
+	if (vk.secondaryPhysicalDevice != VK_NULL_HANDLE) {
+		fprintf(stderr, "DBG: Creating secondary logical device for AMD iGPU\n");
+		
+		// Find compute queue family on secondary device
+		uint32_t secQueueCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice, &secQueueCount, NULL);
+		VkQueueFamilyProperties* secQueueProps = malloc(secQueueCount * sizeof(VkQueueFamilyProperties));
+		vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice, &secQueueCount, secQueueProps);
+		
+		int secComputeFamily = -1;
+		for (uint32_t i = 0; i < secQueueCount; i++) {
+			if ((secQueueProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(secQueueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+				secComputeFamily = i;
+				break;
+			}
+			// Fallback: any compute queue
+			if (secComputeFamily == -1 && (secQueueProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT)) {
+				secComputeFamily = i;
+			}
+		}
+		free(secQueueProps);
+		
+		if (secComputeFamily >= 0) {
+			VkDeviceQueueCreateInfo secQueueInfo = {0};
+			secQueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			secQueueInfo.queueFamilyIndex = secComputeFamily;
+			secQueueInfo.queueCount = 1;
+			float queuePriority = 1.0f;
+			secQueueInfo.pQueuePriorities = &queuePriority;
+			
+			// Reuse the same feature chain as primary device
+			VkDeviceCreateInfo secDesc = {0};
+			secDesc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+			secDesc.pNext = &device_features;  // reuse the same feature chain
+			secDesc.queueCreateInfoCount = 1;
+			secDesc.pQueueCreateInfos = &secQueueInfo;
+			secDesc.pEnabledFeatures = NULL;
+			secDesc.enabledExtensionCount = enabledDeviceExtensionCount;
+			secDesc.ppEnabledExtensionNames = &enabledDeviceExtensions[0];
+			
+			VkResult res = vkCreateDevice(vk.secondaryPhysicalDevice, &secDesc, NULL, &vk.secondaryDevice);
+			if (res == VK_SUCCESS) {
+				vk.secondaryComputeFamily = secComputeFamily;
+				vkGetDeviceQueue(vk.secondaryDevice, secComputeFamily, 0, &vk.secondaryComputeQueue);
+				vkGetPhysicalDeviceProperties(vk.secondaryPhysicalDevice, &vk.secondaryDeviceProperties);
+				vk.multiGPUEnabled = qtrue;
+				ri.Printf(PRINT_ALL, "Multi-GPU: Secondary device %s (compute queue family %d) enabled\n", 
+					vk.secondaryDeviceProperties.deviceName, secComputeFamily);
+			} else {
+				ri.Printf(PRINT_WARNING, "Failed to create secondary device: %d\n", res);
+			}
+		}
+	}
 
-	VK_CHECK(vkCreateDevice(vk.physicalDevice, &desc, NULL, &vk.device), "failed to create logical device!")
 }
-
 static void VK_CreateCommandPool() {
 	vkGetDeviceQueue(vk.device, vk.queryFamilyIndices.graphicsFamily, 0, &vk.graphicsQueue);
 	vkGetDeviceQueue(vk.device, vk.queryFamilyIndices.presentFamily, 0, &vk.presentQueue);

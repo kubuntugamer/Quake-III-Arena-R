@@ -1179,6 +1179,14 @@ typedef struct {
 	qboolean					coherentMemory; // a DEVICE_COHERENT heap was picked for uploads
 	uint32_t					amdComputeUnits; // from VK_AMD_shader_core_properties2
 
+	// Multi-GPU support
+	VkPhysicalDevice			secondaryPhysicalDevice; // AMD iGPU for compute
+	VkDevice					secondaryDevice;
+	VkQueue						secondaryComputeQueue;
+	uint32_t					secondaryComputeFamily;
+	VkPhysicalDeviceProperties	secondaryDeviceProperties;
+	qboolean					multiGPUEnabled;
+
 	vkqueueFamilyIndices_t		queryFamilyIndices;
 
 	VkDevice					device;
