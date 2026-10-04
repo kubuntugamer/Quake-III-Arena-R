@@ -1132,6 +1132,7 @@ typedef struct {
 
 	uint32_t					imageCount;
 	VkFormat					imageFormat;
+	VkPresentModeKHR			presentMode;
 	VkImage						*images;
 	VkImageView					*imageViews;
 	VkFramebuffer				*framebuffers;
@@ -1706,6 +1707,7 @@ extern	cvar_t	*r_nocurves;
 extern	cvar_t	*r_showcluster;
 
 extern cvar_t	*r_mode;				// video mode
+extern cvar_t	*r_presentMode;			// vulkan present mode: 0 FIFO, 1 MAILBOX, 2 IMMEDIATE, 3 LATEST_READY
 extern cvar_t	*r_fullscreen;
 extern cvar_t	*r_gamma;
 extern cvar_t	*r_displayRefresh;		// optional display refresh option
@@ -1889,6 +1891,7 @@ void VK_UploadBufferDataOffset(vkbuffer_t* buffer, VkDeviceSize offset, VkDevice
 void VK_UploadBufferData(vkbuffer_t* buffer, const byte* data);
 void VK_DestroySwapchain();
 void VK_SetupSwapchain();
+qboolean VK_RecreateSwapchain(void);
 void VK_CreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t *bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
 void VK_UpdateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* oldBas, vkbottomAS_t* newBas, vkbuffer_t* bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
 void VK_RecreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t* bottomASBuffer, VkBuildAccelerationStructureFlagsKHR flag);

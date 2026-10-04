@@ -24,11 +24,12 @@ static void VK_CreateSyncObjects();
 // Helper
 static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, uint32_t availableFormatsCount);
 static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, uint32_t availablePresentModesCount);
+static const char *VK_PresentModeName(VkPresentModeKHR mode);
 
 static VkFramebuffer VK_CurrentFramebuffer();
 static VkCommandBuffer VK_CurrentCommandBuffer();
 
-void VK_SetupSwapchain() 
+void VK_SetupSwapchain()
 {
 	VK_CreateSwapChain();
 	VK_CreateImageViews();
@@ -41,6 +42,23 @@ void VK_SetupSwapchain()
 
 	vk.swapchain.CurrentCommandBuffer = VK_CurrentCommandBuffer;
 	vk.swapchain.CurrentFramebuffer = VK_CurrentFramebuffer;
+
+	ri.Printf(PRINT_ALL, "...using present mode %s\n", VK_PresentModeName(vk.swapchain.presentMode));
+}
+
+// Idle + rebuild the swapchain (same window). Enough when only the present
+// mode changed; extent-sized renderer resources are untouched. Returns qfalse
+// if the surface extent changed (caller must vid_restart for a full rebuild).
+qboolean VK_RecreateSwapchain(void)
+{
+	vkDeviceWaitIdle(vk.device);
+	VK_DestroySwapchain();
+	VK_SetupSwapchain();
+	if (vk.swapchain.extent.width != (uint32_t)glConfig.vidWidth ||
+		vk.swapchain.extent.height != (uint32_t)glConfig.vidHeight) {
+		return qfalse;
+	}
+	return qtrue;
 }
 
 void VK_DestroySwapchain() {
@@ -128,6 +146,7 @@ static void VK_CreateSwapChain() {
 	createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createInfo.presentMode = presentMode;
+	vk.swapchain.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 	createInfo.oldSwapchain = VK_NULL_HANDLE;
 
@@ -342,14 +361,36 @@ void record_buffer_memory_barrier(VkCommandBuffer cb, VkBuffer buffer,
 
 void VK_BeginFrame()
 {
+	VkResult res;
 	if (vk.swapchain.frameStarted) return;
-	vk.swapchain.frameStarted = qtrue;
 
-    // wait for command buffer submission for last image clock_t start = clock();
-    
+	// live present-mode switch (r_presentMode is intentionally not latched)
+	if (r_presentMode != NULL && r_presentMode->modified) {
+		r_presentMode->modified = qfalse;
+		ri.Printf(PRINT_ALL, "...recreating swapchain for r_presentMode %d\n", r_presentMode->integer);
+		if (!VK_RecreateSwapchain()) {
+			ri.Printf(PRINT_WARNING, "Vulkan: surface extent changed, run vid_restart\n");
+			ri.Cmd_ExecuteText(EXEC_APPEND, "vid_restart\n");
+			return;
+		}
+	}
+
 	// save current image as last and acquire next
 	vk.swapchain.lastImage = vk.swapchain.currentImage;
-	vkAcquireNextImageKHR(vk.device, vk.swapchain.handle, UINT64_MAX, vk.swapchain.imageAvailableSemaphores[vk.swapchain.currentFrame], VK_NULL_HANDLE, &vk.swapchain.currentImage);
+	res = vkAcquireNextImageKHR(vk.device, vk.swapchain.handle, UINT64_MAX, vk.swapchain.imageAvailableSemaphores[vk.swapchain.currentFrame], VK_NULL_HANDLE, &vk.swapchain.currentImage);
+	if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+		if (!VK_RecreateSwapchain()) {
+			ri.Cmd_ExecuteText(EXEC_APPEND, "vid_restart\n");
+			return;
+		}
+		res = vkAcquireNextImageKHR(vk.device, vk.swapchain.handle, UINT64_MAX, vk.swapchain.imageAvailableSemaphores[vk.swapchain.currentFrame], VK_NULL_HANDLE, &vk.swapchain.currentImage);
+	}
+	if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR && res != VK_TIMEOUT) {
+		ri.Printf(PRINT_WARNING, "Vulkan: vkAcquireNextImageKHR failed (%s), skipping frame\n", VK_ErrorString(res));
+		return;
+	}
+
+	vk.swapchain.frameStarted = qtrue;
 
     clock_t start = clock();
 	// we want to wait until the commands frm the current image and next image have completed execution in order to avoid race condition when reading the prev buffers
@@ -420,7 +461,17 @@ void VK_EndFrame()
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &vk.swapchain.currentImage;
 
-	VK_CHECK(vkQueuePresentKHR(vk.presentQueue, &presentInfo), "failed to Queue Present!");
+	VkResult res = vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+	if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
+		// window resized or surface changed: rebuild swapchain; a full
+		// vid_restart follows automatically if the extent itself changed
+		if (!VK_RecreateSwapchain()) {
+			ri.Printf(PRINT_WARNING, "Vulkan: surface extent changed, running vid_restart\n");
+			ri.Cmd_ExecuteText(EXEC_APPEND, "vid_restart\n");
+		}
+	} else {
+		VK_CHECK(res, "failed to Queue Present!");
+	}
 
 	vk.swapchain.lastFrame = vk.swapchain.currentFrame;
 	vk.swapchain.currentFrame = (vk.swapchain.currentFrame + 1) % vk.swapchain.imageCount;
@@ -460,34 +511,55 @@ static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *availableF
 	return availableFormats[0];
 }
 
+static const char *VK_PresentModeName(VkPresentModeKHR mode) {
+	switch (mode) {
+	case VK_PRESENT_MODE_FIFO_KHR: return "FIFO (vsync)";
+	case VK_PRESENT_MODE_FIFO_RELAXED_KHR: return "FIFO_RELAXED (vsync, tear if late)";
+	case VK_PRESENT_MODE_MAILBOX_KHR: return "MAILBOX (low-latency vsync)";
+	case VK_PRESENT_MODE_IMMEDIATE_KHR: return "IMMEDIATE (tearing)";
+#ifdef VK_PRESENT_MODE_FIFO_LATEST_READY_KHR
+	case VK_PRESENT_MODE_FIFO_LATEST_READY_KHR: return "FIFO_LATEST_READY (low-latency vsync)";
+#endif
+	default: return "unknown";
+	}
+}
+
 static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR *availablePresentModes, uint32_t availablePresentModesCount) {
-	VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
-
-	for (int i = 0; i < availablePresentModesCount; i++) {
-		if (availablePresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-			return availablePresentModes[i];
-		}
-		else if (availablePresentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-			bestMode = availablePresentModes[i];
-		}
-	}
-
-	/*
-	std::cout << "Present Mode..." << std::endl;
-	switch (bestMode) {
-	case VK_PRESENT_MODE_IMMEDIATE_KHR:
-		std::cout << "\t" << "VK_PRESENT_MODE_IMMEDIATE_KHR" << std::endl;
+	// r_presentMode: 0 FIFO, 1 MAILBOX (default), 2 IMMEDIATE, 3 FIFO_LATEST_READY
+	int want = (r_presentMode != NULL) ? r_presentMode->integer : 1;
+	VkPresentModeKHR preference[4];
+	int prefCount = 0;
+	switch (want) {
+	case 0:
+		preference[prefCount++] = VK_PRESENT_MODE_FIFO_KHR;
 		break;
-	case VK_PRESENT_MODE_MAILBOX_KHR:
-		std::cout << "\t" << "VK_PRESENT_MODE_MAILBOX_KHR" << std::endl;
+	case 2:
+		preference[prefCount++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
+		preference[prefCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
+		preference[prefCount++] = VK_PRESENT_MODE_FIFO_KHR;
 		break;
-	case VK_PRESENT_MODE_FIFO_KHR:
-		std::cout << "\t" << "VK_PRESENT_MODE_FIFO_KHR" << std::endl;
+	case 3:
+#ifdef VK_PRESENT_MODE_FIFO_LATEST_READY_KHR
+		preference[prefCount++] = VK_PRESENT_MODE_FIFO_LATEST_READY_KHR;
+#endif
+		preference[prefCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
+		preference[prefCount++] = VK_PRESENT_MODE_FIFO_KHR;
 		break;
+	case 1:
 	default:
-		std::cout << "\t" << "Other" << std::endl;
+		preference[prefCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
+		preference[prefCount++] = VK_PRESENT_MODE_FIFO_KHR;
 		break;
 	}
-	*/
-	return bestMode;
+
+	for (int p = 0; p < prefCount; p++) {
+		for (int i = 0; i < (int)availablePresentModesCount; i++) {
+			if (availablePresentModes[i] == preference[p]) {
+				return availablePresentModes[i];
+			}
+		}
+	}
+
+	// FIFO is guaranteed to be supported
+	return VK_PRESENT_MODE_FIFO_KHR;
 }
