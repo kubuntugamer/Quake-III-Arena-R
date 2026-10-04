@@ -94,6 +94,7 @@ PFN_vkBeginCommandBuffer						vkBeginCommandBuffer;
 PFN_vkEndCommandBuffer							vkEndCommandBuffer;
 PFN_vkFreeCommandBuffers						vkFreeCommandBuffers;
 PFN_vkCmdPipelineBarrier						vkCmdPipelineBarrier;
+PFN_vkCmdCopyBuffer							vkCmdCopyBuffer;
 PFN_vkCmdCopyBufferToImage						vkCmdCopyBufferToImage;
 PFN_vkCmdBindPipeline                           vkCmdBindPipeline;
 PFN_vkCmdBindDescriptorSets                     vkCmdBindDescriptorSets;
@@ -272,6 +273,7 @@ qboolean VK_LoadDeviceFunctions(void)
 	VK_DEVICE_LEVEL_FUNCTION(vkFreeCommandBuffers, "vkFreeCommandBuffers");
 
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdPipelineBarrier, "vkCmdPipelineBarrier");
+	VK_DEVICE_LEVEL_FUNCTION(vkCmdCopyBuffer, "vkCmdCopyBuffer");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdCopyBufferToImage, "vkCmdCopyBufferToImage");
     VK_DEVICE_LEVEL_FUNCTION(vkCmdBindPipeline, "vkCmdBindPipeline");
     VK_DEVICE_LEVEL_FUNCTION(vkCmdBindDescriptorSets, "vkCmdBindDescriptorSets");

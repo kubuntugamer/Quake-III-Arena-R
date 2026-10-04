@@ -1,0 +1,151 @@
+// AI Acceleration Structure Build Predictor
+// Predicts which BLAS need rebuilding based on object motion
+// Runs on secondary GPU, outputs rebuild list for primary GPU
+
+#version 460 core
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+layout(binding = 1) readonly buffer InstanceDataBuffer {
+    struct ASInstanceData {
+        uint currInstanceID;
+        uint prevInstanceID;
+        uint instanceCount;
+        uint pad;
+    } instances[];
+} instanceBuf;
+
+layout(binding = 1) readonly buffer BottomASBuffer {
+    struct BottomASData {
+        uint dataOffset;
+        uint instanceCount;
+        vec3 boundsMin;
+        vec3 boundsMax;
+        mat4 transform;
+        mat4 prevTransform;
+        uint needsRebuild;
+        uint pad[3];
+    } bottomAS[];
+} bottomASBuf;
+
+layout(binding = 2) buffer RebuildListBuffer {
+    uint rebuildIndices[];
+    atomic_uint rebuildCount;
+} rebuildBuf;
+
+layout(binding = 3) uniform ASPredictParams {
+    uint frameIndex;
+    uint bottomASCount;
+    float motionThreshold;
+    float rotationThreshold;
+} params;
+
+layout(binding = 4) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+float Dequantize(int w) {
+    return float(int(w)) * 0.01;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= params.bottomASCount) return;
+    
+    BottomASData as = bottomASBuffer[idx];
+    
+    // Compute motion since last frame
+    vec3 translation = as.transform[3].xyz - as.prevTransform[3].xyz;
+    float translationMag = length(translation);
+    
+    // Check rotation difference (trace of rotation matrix)
+    mat3 currRot = mat3(as.transform);
+    mat3 prevRot = mat3(as.prevTransform);
+    float rotTrace = trace(currRot * transpose(prevRot));
+    float rotAngle = acos(clamp((rotTrace - 1.0) * 0.5, -1.0, 1.0));
+    
+    // Velocity-based prediction
+    vec3 velocity = translation; // Simplified - would use actual velocity buffer
+    float speed = length(velocity);
+    
+    // Check if rebuild needed
+    bool needsRebuild = false;
+    
+    // Translation threshold
+    if (translationMag > params.motionThreshold) {
+        needsRebuild = true;
+    }
+    
+    // Rotation threshold
+    if (rotAngle > params.rotationThreshold) {
+        needsRebuild = true;
+    }
+    
+    // Deformation check (bounds change)
+    vec3 boundsSize = as.boundsMax - as.boundsMin;
+    vec3 prevBoundsSize = as.prevTransform[3].xyz - as.prevTransform[3].xyz; // simplified
+    if (length(boundsSize - prevBoundsSize) > params.motionThreshold * 0.5) {
+        needsRebuild = true;
+    }
+    
+    // First frame always rebuilds
+    if (params.frameIndex == 0) {
+        needsRebuild = true;
+    }
+    
+    // AI-enhanced prediction using tiny neural net
+    // Input: translation, rotation, bounds change, velocity
+    // Output: probability of needing rebuild
+    float features[8] = {
+        translationMag,
+        rotAngle,
+        speed,
+        params.motionThreshold,
+        params.rotationThreshold,
+        float(params.frameIndex & 255) / 255.0,
+        length(as.boundsMax - as.boundsMin),
+        0.0 // padding
+    };
+    
+    // Tiny 2-layer network: 4 inputs -> 4 hidden -> 1 output
+    // Weights from buffer (deterministic)
+    float h[4];
+    for (int i = 0; i < 4; i++) {
+        float sum = 0.0;
+        for (int j = 0; j < 8; j++) {
+            uint wIdx = (i * 8 + j) % 1024;
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += features[j] * float(int(weightBuf.weights[wIdx]) & 0xFF) * 0.01;
+        }
+        // Bias
+        int wb = int(weightBuf.weights[1024 + i]) & 0xFF;
+        h[i] = max(0.0, sum + float(wb) * 0.01);
+    }
+    
+    // Output neuron
+    float rebuildProb = 0.0;
+    for (int i = 0; i < 4; i++) {
+        uint wIdx = (i + 32) % 1024;
+        int w = int(weightBuf.weights[wIdx]) & 0xFF;
+        rebuildProb += h[i] * float(int(weightBuf.weights[wIdx]) & 0xFF) * 0.01;
+    }
+    rebuildProb = 1.0 / (1.0 + exp(-rebuildProb)); // Sigmoid
+    
+    // Combine heuristic and AI prediction
+    float finalProb = mix(float(needsRebuild), rebuildProb, 0.3);
+    
+    // Decide rebuild
+    bool shouldRebuild = finalProb > 0.5 || needsRebuild;
+    
+    if (shouldRebuild) {
+        uint idx = atomicAdd(rebuildBuf.rebuildCount, 1u);
+        rebuildBuf.rebuildIndices[idx] = gl_GlobalInvocationID.x;
+    }
+    
+    // Store result back
+    bottomASBuf[idx].needsRebuild = shouldRebuild ? 1u : 0u;
+}

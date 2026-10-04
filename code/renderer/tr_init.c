@@ -179,6 +179,10 @@ cvar_t* rt_tonemapping_reinhard;
 cvar_t* rt_fsr;
 cvar_t* rt_fsrSharpness;
 cvar_t* rt_nrdPack;
+cvar_t* rt_aiDenoiser;
+cvar_t* rt_aiTSR;
+cvar_t* rt_aiASPredict;
+cvar_t* rt_aiMaterial;
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral )
 {
@@ -1295,6 +1299,10 @@ void R_Register( void )
 	rt_fsr = ri.Cvar_Get("rt_fsr", "0", 0);
 	rt_fsrSharpness = ri.Cvar_Get("rt_fsrSharpness", "0.5", 0);
 	rt_nrdPack = ri.Cvar_Get("rt_nrdPack", "0", 0);
+	rt_aiDenoiser = ri.Cvar_Get("rt_aiDenoiser", "0", 0);
+	rt_aiTSR = ri.Cvar_Get("rt_aiTSR", "0", 0);
+	rt_aiASPredict = ri.Cvar_Get("rt_aiASPredict", "0", 0);
+	rt_aiMaterial = ri.Cvar_Get("rt_aiMaterial", "0", 0);
 
 	// make sure all the commands added here are also
 	// removed in R_Shutdown

@@ -40,6 +40,8 @@
 
 #endif
 
+#include "tr_local.h"
+
 #ifndef APIENTRY
 #define APIENTRY
 #endif
@@ -158,6 +160,7 @@ extern PFN_vkFreeCommandBuffers						vkFreeCommandBuffers;
 
 extern PFN_vkCmdPipelineBarrier						vkCmdPipelineBarrier;
 extern PFN_vkCmdCopyBufferToImage						vkCmdCopyBufferToImage;
+extern PFN_vkCmdCopyBuffer							vkCmdCopyBuffer;
 extern PFN_vkCmdBindPipeline                           vkCmdBindPipeline;
 extern PFN_vkCmdBindDescriptorSets                     vkCmdBindDescriptorSets;
 extern PFN_vkCmdBindVertexBuffers                      vkCmdBindVertexBuffers;

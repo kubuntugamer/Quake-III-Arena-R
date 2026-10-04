@@ -1,0 +1,160 @@
+#version 460 core
+#extension GL_EXT_debug_printf : enable
+
+// AI Denoiser - Tiny neural denoiser for post-ASVGF cleanup
+// Runs on secondary GPU (AMD iGPU) after ASVGF
+// Input: ASVGF output (noisy), Output: Denoised image
+// Architecture: Tiny 3-layer MLP per pixel (shared weights)
+
+// Layout bindings:
+// binding 0: weights buffer (STORAGE_BUFFER)
+// binding 1: input image (noisy ASVGF output)
+// binding 2: output image (denoised)
+// binding 3: uniform buffer (frame params)
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+layout(rgba16f, binding = 1) uniform readonly image2D inputImage;
+layout(rgba16f, binding = 2) writeonly image2D outputImage;
+
+layout(binding = 3) uniform FrameParams {
+    uint frameIndex;
+    uint2 resolution;
+    float noiseScale;
+    float temporalWeight;
+} params;
+
+// Network architecture: 3-layer MLP with 16 hidden units
+// Input: 7 channels (RGB + normal + depth + motion + variance)
+// Hidden: 16 units with ReLU
+// Output: 3 channels (RGB denoised)
+
+struct Layer1 { uint32_t w[16*10]; uint32_t b[16]; };  // 10 inputs -> 16
+struct Layer2 { uint32_t w[16*16]; uint32_t b[16]; };  // 16 -> 16
+struct Layer3 { uint32_t w[3*16]; uint32_t b[3]; };    // 16 -> 3
+
+// INT8 quantization: weight = (int8_t)weight * scale
+// Scale factors per layer
+const float L1_SCALE = 0.01;
+const float L2_SCALE = 0.01;
+const float L3_SCALE = 0.01;
+
+// Convert INT8 weight to float
+float Dequantize(int w, float scale) {
+    return float(int(w)) * scale;
+}
+
+// ReLU activation
+float ReLU(float x) { return max(x, 0.0); }
+
+// Simple hash for weight indexing
+uint Hash2(uint x, uint y) {
+    uint h = x * 1664525u + y * 1013904223u + 12345;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
+    return h;
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= int(params.resolution.x) || pos.y >= int(params.resolution.y)) return;
+    
+    // Load noisy input (ASVGF output)
+    vec4 noisy = imageLoad(inputImage, pos);
+    vec3 noisyRGB = noisy.rgb;
+    
+    // Sample neighbors for spatial context (3x3)
+    vec3 neighbors[9];
+    int idx = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 np = pos + ivec2(dx, dy);
+            if (np.x >= 0 && np.x < int(params.resolution.x) && 
+                np.y >= 0 && np.y < int(params.resolution.y)) {
+                neighbors[idx] = imageLoad(inputImage, np).rgb;
+            } else {
+                neighbors[idx] = noisyRGB;
+            }
+            idx++;
+        }
+    }
+    
+    // Feature vector: center + 8 neighbors + frame jitter = 10 values per channel
+    // Total: 30 input features
+    float features[30];
+    idx = 0;
+    for (int c = 0; c < 3; c++) {
+        features[idx++] = noisyRGB[c];
+        for (int i = 0; i < 9; i++) {
+            features[idx++] = neighbors[i][c];
+        }
+    }
+    
+    // Add frame jitter as feature
+    float jitter = float(params.frameIndex & 255) / 255.0;
+    features[27] = jitter;
+    features[28] = float(params.frameIndex & 15) / 15.0;
+    features[29] = params.noiseScale;
+    
+    // Layer 1: 30 inputs -> 16 hidden
+    float h1[16];
+    uint weightOffset = 0;
+    for (int i = 0; i < 16; i++) {
+        float sum = 0.0;
+        for (int j = 0; j < 30; j++) {
+            uint wIdx = (i * 30 + j) % 1024;  // Modulo weight buffer size
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += features[j] * Dequantize(int(w), L1_SCALE);
+        }
+        // Bias
+        uint bIdx = 1024 + weight_offset % 16;
+        int wb = int(weightBuf.weights[bIdx]) & 0xFF;
+        sum += Dequantize(int(wb), L1_SCALE);
+        h1[i] = ReLU(sum);
+    }
+    
+    // Layer 2: 16 -> 16
+    float h2[16];
+    for (int i = 0; i < 16; i++) {
+        float sum = 0.0;
+        for (int j = 0; j < 16; j++) {
+            uint wIdx = (i * 16 + j + 16*16) % 1024;
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += h1[j] * Dequantize(int(w), L2_SCALE);
+        }
+        // Bias
+        uint bIdx = 1024 + 16 + i;
+        int wb = int(weightBuf.weights[bIdx]) & 0xFF;
+        sum += Dequantize(int(wb), L2_SCALE);
+        h2[i] = ReLU(sum);
+    }
+    
+    // Output layer: 16 -> 3 (RGB)
+    vec3 denoised = vec3(0.0);
+    for (int c = 0; c < 3; c++) {
+        float sum = 0.0;
+        for (int j = 0; j < 16; j++) {
+            uint wIdx = (c * 16 + j + 16*16 + 16*16) % 1024;
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += h2[j] * Dequantize(int(w), L3_SCALE);
+        }
+        // Bias
+        uint bIdx = 1024 + 16 + 16 + c;
+        int wb = int(weightBuf.weights[bIdx]) & 0xFF;
+        sum += Dequantize(int(wb), L3_SCALE);
+        denoised[c] = sum;
+    }
+    
+    // Temporal blending with ASVGF output
+    vec3 final = mix(noisyRGB, denoised, params.temporalWeight);
+    final = clamp(final, 0.0, 1.0);
+    
+    imageStore(outputImage, ivec2(gl_GlobalInvocationID.xy), vec4(final, 1.0));
+}

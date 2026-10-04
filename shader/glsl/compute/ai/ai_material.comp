@@ -1,0 +1,173 @@
+// AI Material Enhancement - Runtime texture/material enhancement
+// Enhances albedo, normal, roughness on-the-fly
+// Runs on secondary GPU, reads/writes gBuffer
+
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+layout(rgba16f, binding = 1) uniform readonly image2D albedoIn;
+layout(rgba16f, binding = 2) uniform readonly image2D normalIn;
+layout(r16f, binding = 3) uniform readonly image2D roughnessIn;
+layout(r32f, binding = 4) uniform readonly image2D depthIn;
+
+layout(rgba16f, binding = 5) writeonly image2D albedoOut;
+layout(rgba16f, binding = 6) writeonly image2D normalOut;
+layout(r16f, binding = 7) writeonly image2D roughnessOut;
+
+layout(binding = 5) uniform MaterialParams {
+    uint frameIndex;
+    uint2 resolution;
+    float enhanceStrength;
+    float denoiseStrength;
+    float sharpness;
+} params;
+
+layout(binding = 5) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+float Dequantize(int w) {
+    return float(int(w)) * 0.01;
+}
+
+// Simple 3x3 CNN for material enhancement
+vec3 EnhanceAlbedo(vec3 albedo, vec3 normal, float roughness, float depth, ivec2 pos) {
+    // Sample 3x3 neighborhood
+    vec3 neighbors[9];
+    int idx = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 np = ivec2(gl_GlobalInvocationID.xy) + ivec2(dx, dy);
+            neighbors[idx] = imageLoad(albedoIn, np).rgb;
+            idx++;
+        }
+    }
+    
+    // Center pixel
+    vec3 center = imageLoad(albedoIn, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    vec3 n = imageLoad(normalIn, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    float r = imageLoad(roughnessIn, ivec2(gl_GlobalInvocationID.xy)).r;
+    float d = imageLoad(depthIn, ivec2(gl_GlobalInvocationID.xy)).r;
+    
+    // Feature vector: center + 8 neighbors + normal + roughness + depth
+    float features[30];
+    int idx = 0;
+    for (int c = 0; c < 3; c++) {
+        features[idx++] = center[c];
+        for (int i = 0; i < 9; i++) {
+            features[idx++] = neighbors[i][c];
+        }
+    }
+    // Add normal, roughness, depth
+    features[27] = n.x; features[28] = n.y; features[29] = n.z;
+    
+    // Tiny 2-layer network: 30 -> 16 -> 3
+    // Layer 1: 30 -> 16
+    float h1[16];
+    for (int i = 0; i < 16; i++) {
+        float sum = 0.0;
+        for (int j = 0; j < 30; j++) {
+            uint wIdx = (i * 30 + j) % 1024;
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += features[j] * float(int(weightBuf.weights[wIdx]) & 0xFF) * 0.01;
+        }
+        int wb = int(weightBuf.weights[1024 + i]) & 0xFF;
+        h1[i] = max(0.0, sum + float(int(weightBuf.weights[1024 + i]) & 0xFF) * 0.01);
+    }
+    
+    // Layer 2: 16 -> 3
+    vec3 enhanced = vec3(0.0);
+    for (int c = 0; c < 3; c++) {
+        float sum = 0.0;
+        for (int j = 0; j < 16; j++) {
+            uint wIdx = (c * 16 + j) % 1024;
+            int w = int(weightBuf.weights[wIdx]) & 0xFF;
+            sum += h1[j] * float(int(weightBuf.weights[wIdx]) & 0xFF) * 0.01;
+        }
+        int wb = int(weightBuf.weights[1024 + 16 + c]) & 0xFF;
+        enhanced[c] = max(0.0, sum + float(int(weightBuf.weights[1024 + 16 + c]) & 0xFF) * 0.01);
+    }
+    
+    // Blend with original
+    vec3 original = imageLoad(albedoIn, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    return mix(imageLoad(albedoIn, ivec2(gl_GlobalInvocationID.xy)).rgb, enhanced, 0.5);
+}
+
+vec3 EnhanceNormal(vec3 normal, ivec2 pos) {
+    // Normal enhancement: denoise and fix interpolation artifacts
+    vec3 neighbors[9];
+    int idx = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            neighbors[idx] = imageLoad(normalIn, ivec2(gl_GlobalInvocationID.xy) + ivec2(dx, dy)).rgb;
+            idx++;
+        }
+    }
+    
+    vec3 center = imageLoad(normalIn, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    vec3 filtered = center;
+    
+    // Bilateral filter on normals
+    float weightSum = 0.0;
+    for (int i = 0; i < 9; i++) {
+        float diff = length(neighbors[i] - center);
+        float w = exp(-diff * 10.0);
+        filtered += neighbors[i] * w;
+        weightSum += w;
+    }
+    
+    if (weightSum > 0.0) filtered /= weightSum;
+    filtered = normalize(filtered);
+    
+    return mix(normal, filtered, 0.3);
+}
+
+float EnhanceRoughness(float roughness, vec3 normal, ivec2 pos) {
+    // Roughness enhancement: reduce noise, preserve edges
+    float neighbors[9];
+    int idx = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            neighbors[idx] = imageLoad(roughnessIn, ivec2(gl_GlobalInvocationID.xy) + ivec2(dx, dy)).r;
+            idx++;
+        }
+    }
+    
+    float center = imageLoad(roughnessIn, ivec2(gl_GlobalInvocationID.xy)).r;
+    
+    // Edge-aware smoothing
+    float filtered = 0.0;
+    float weightSum = 0.0;
+    for (int i = 0; i < 9; i++) {
+        float diff = abs(neighbors[i] - center);
+        float w = exp(-diff * 20.0);
+        filtered += neighbors[i] * w;
+        weightSum += w;
+    }
+    
+    if (weightSum > 0.0) filtered /= weightSum;
+    
+    return mix(roughness, filtered, 0.2);
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= int(resolution.x) || pos.y >= int(resolution.y)) return;
+    
+    // Enhance albedo
+    vec3 albedo = EnhanceAlbedo(vec3(0), vec3(0), 0, 0, pos);
+    imageStore(albedoOut, ivec2(gl_GlobalInvocationID.xy), vec4(albedo, 1.0));
+    
+    // Enhance normal
+    vec3 normal = EnhanceNormal(vec3(0), pos);
+    imageStore(normalOut, ivec2(gl_GlobalInvocationID.xy), vec4(normal, 1.0));
+    
+    // Enhance roughness
+    float roughness = EnhanceRoughness(0.0, vec3(0), pos);
+    imageStore(roughnessOut, ivec2(gl_GlobalInvocationID.xy), vec4(roughness));
+}

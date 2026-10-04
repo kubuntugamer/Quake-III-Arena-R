@@ -1,5 +1,6 @@
 #include "tr_local.h"
 #include "../../shader/glsl/constants.h"
+#include "ai_pipeline.h"
 
 /*
 glConfig.driverType == VULKAN && r_vertexLight->value == 2
@@ -999,6 +1000,20 @@ static void RB_TraceRays() {
 		VK_BindCompute2DescriptorSets(&vk_d.accelerationStructures.asvgfTaaPipeline, &vk_d.computeDescriptor[vk.swapchain.currentImage], &vk_d.imageDescriptor);
 		VK_Dispatch((vk.swapchain.extent.width + 31) / 32, (vk.swapchain.extent.height + 31) / 32, 1);
 		PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_ASVGF_TAA_END);
+	}
+
+	// AI Denoiser (runs on secondary GPU if available)
+	if (vk.multiGPUEnabled && rt_aiDenoiser->integer) {
+		PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_AI_DENOISER_BEGIN);
+		AI_DispatchDenoiser(vk.swapchain.CurrentCommandBuffer(), vk.swapchain.currentImage);
+		PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_AI_DENOISER_END);
+	}
+
+	// AI TSR Upscaler (runs on secondary GPU if available)
+	if (vk.multiGPUEnabled && rt_aiTSR->integer) {
+		PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_AI_TSR_BEGIN);
+		AI_DispatchTSR(vk.swapchain.CurrentCommandBuffer(), vk.swapchain.currentImage);
+		PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_AI_TSR_END);
 	}
 
 	BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.gBuffer[vk.swapchain.currentImage].transparent.handle);

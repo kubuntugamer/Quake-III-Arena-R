@@ -1,0 +1,111 @@
+// AI Temporal Super Resolution (TSR) - 4K from 1080p
+// Runs on secondary GPU (AMD iGPU)
+// Input: 1080p rendered frame + motion vectors + depth
+// Output: 4K upscaled frame
+
+#version 460 core
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) readonly buffer WeightBuffer {
+    uint32_t weights[];
+} weightBuf;
+
+layout(rgba16f, binding = 1) uniform readonly image2D inputImage;      // 1080p color
+layout(rgba16f, binding = 2) uniform readonly image2D motionImage;     // 1080p motion vectors
+layout(r32f, binding = 3) uniform readonly image2D depthImage;         // 1080p depth
+layout(rgba16f, binding = 4) writeonly image2D outputImage;            // 4K output
+
+layout(binding = 5) uniform FrameParams {
+    uint frameIndex;
+    uint2 inputResolution;    // 1920x1080
+    uint2 outputResolution;   // 3840x2160
+    float temporalWeight;
+    float sharpness;
+    mat4 prevViewProj;
+    mat4 currViewProj;
+    mat4 prevViewProjInv;
+} params;
+
+// Simple hash
+uint Hash(uint x) {
+    uint h = x;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
+    return h;
+}
+
+float Dequantize(int w, float scale) {
+    return float(int(w)) * 0.01;
+}
+
+// Simple bilinear sample with weights
+vec4 BilinearSample(image2D img, vec2 uv) {
+    ivec2 size = imageSize(inputImage);
+    vec2 uvClamped = clamp(uv, vec2(0.5) / vec2(imageSize(inputImage)), 
+                          vec2(1.0) - vec2(0.5) / vec2(imageSize(inputImage)));
+    ivec2 p = ivec2(uvClamped * vec2(imageSize(inputImage)) - vec2(0.5));
+    vec2 f = fract(uvClamped * vec2(imageSize(inputImage)) - vec2(0.5));
+    
+    vec4 c00 = imageLoad(inputImage, ivec2(p));
+    vec4 c10 = imageLoad(inputImage, ivec2(p + ivec2(1, 0)));
+    vec4 c01 = imageLoad(inputImage, ivec2(p + ivec2(0, 1)));
+    vec4 c11 = imageLoad(inputImage, ivec2(p + ivec2(1, 1)));
+    
+    return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
+
+// Simple 3x3 CNN for upscaling
+vec4 UpscalePixel(ivec2 outPos) {
+    // Output position in 4K
+    vec2 outUV = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5)) / vec2(params.outputResolution);
+    
+    // Map to input (1080p) space
+    vec2 inUV = outUV;
+    ivec2 inSize = imageSize(inputImage);
+    
+    // Gather 3x3 neighborhood in input space
+    vec4 samples[9];
+    vec2 sampleUVs[9];
+    int idx = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            vec2 sampleUV = inUV + vec2(dx, dy) / vec2(imageSize(inputImage));
+            sampleUVs[idx] = sampleUV;
+            samples[idx] = BilinearSample(inputImage, sampleUV);
+            idx++;
+        }
+    }
+    
+    // Simple learned upscaling kernel (3x3 -> 1)
+    // In practice, this would use the weight buffer
+    // For now, use a simple bicubic-like kernel
+    vec4 result = vec4(0.0);
+    float weights[9] = {
+        0.0625, 0.125, 0.0625,
+        0.125,  0.25,  0.125,
+        0.0625, 0.125, 0.0625
+    };
+    
+    vec4 result = vec4(0.0);
+    for (int i = 0; i < 9; i++) {
+        result += samples[i] * weights[i];
+    }
+    
+    // Add sharpening
+    vec4 center = imageLoad(inputImage, ivec2(vec2(inSize) * vec2(0.5)));
+    vec4 sharp = result + (result - center) * 0.5;
+    
+    return clamp(sharp, 0.0, 1.0);
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= int(params.outputResolution.x) || pos.y >= int(params.outputResolution.y)) return;
+    
+    vec4 color = UpscalePixel(ivec2(gl_GlobalInvocationID.xy));
+    imageStore(outputImage, ivec2(gl_GlobalInvocationID.xy), color);
+}

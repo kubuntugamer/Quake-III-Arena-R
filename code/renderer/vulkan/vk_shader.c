@@ -18,6 +18,10 @@
 #include "../../../shader/header/asvgf_atrous.comp.h"
 #include "../../../shader/header/asvgf_atrous_lf.comp.h"
 #include "../../../shader/header/asvgf_taa.comp.h"
+#include "../../../shader/header/ai_denoiser.comp.h"
+#include "../../../shader/header/ai_tsr.comp.h"
+#include "../../../shader/header/ai_as_predict.comp.h"
+#include "../../../shader/header/ai_material.comp.h"
 #include "../../../shader/header/compositing.comp.h"
 #include "../../../shader/header/maxmipmap.comp.h"
 #include "../../../shader/header/tonemapping.comp.h"
@@ -199,6 +203,44 @@ void VK_NrdPackCompShader(vkshader_t* shader) {
 		VK_LoadCompShaderFromVariable(nrdPackCompShader, (const char *)nrd_packComp, sizeof(nrd_packComp));
 	}
 	Com_Memcpy(shader, nrdPackCompShader, sizeof(vkshader_t));
+}
+
+// AI shaders
+static vkshader_t* aiDenoiserCompShader = NULL;
+static vkshader_t* aiTSRCompShader = NULL;
+static vkshader_t* aiAspredictCompShader = NULL;
+static vkshader_t* aiMaterialCompShader = NULL;
+
+void VK_AiDenoiserCompShader(vkshader_t* shader) {
+	if (aiDenoiserCompShader == NULL) {
+		aiDenoiserCompShader = malloc(sizeof(vkshader_t));
+		VK_LoadCompShaderFromVariable(aiDenoiserCompShader, (const char *)shader_glsl_compute_ai_ai_denoiser_comp, sizeof(shader_glsl_compute_ai_ai_denoiser_comp));
+	}
+	Com_Memcpy(shader, aiDenoiserCompShader, sizeof(vkshader_t));
+}
+
+void VK_AiTSRCompShader(vkshader_t* shader) {
+	if (aiTSRCompShader == NULL) {
+		aiTSRCompShader = malloc(sizeof(vkshader_t));
+		VK_LoadCompShaderFromVariable(aiTSRCompShader, (const char *)shader_glsl_compute_ai_ai_tsr_comp, sizeof(shader_glsl_compute_ai_ai_tsr_comp));
+	}
+	Com_Memcpy(shader, aiTSRCompShader, sizeof(vkshader_t));
+}
+
+void VK_AiAspredictCompShader(vkshader_t* shader) {
+	if (aiAspredictCompShader == NULL) {
+		aiAspredictCompShader = malloc(sizeof(vkshader_t));
+		VK_LoadCompShaderFromVariable(aiAspredictCompShader, (const char *)shader_glsl_compute_ai_ai_as_predict_comp, sizeof(shader_glsl_compute_ai_ai_as_predict_comp));
+	}
+	Com_Memcpy(shader, aiAspredictCompShader, sizeof(vkshader_t));
+}
+
+void VK_AiMaterialCompShader(vkshader_t* shader) {
+	if (aiMaterialCompShader == NULL) {
+		aiMaterialCompShader = malloc(sizeof(vkshader_t));
+		VK_LoadCompShaderFromVariable(aiMaterialCompShader, (const char *)shader_glsl_compute_ai_ai_material_comp, sizeof(shader_glsl_compute_ai_ai_material_comp));
+	}
+	Com_Memcpy(shader, aiMaterialCompShader, sizeof(vkshader_t));
 }
 
 // rtx
