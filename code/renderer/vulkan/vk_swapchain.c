@@ -148,7 +148,10 @@ static void VK_CreateSwapChain() {
 
 	vk.swapchain.imageFormat = surfaceFormat.format;
 
-	uint32_t imageCount = VK_MAX_SWAPCHAIN_SIZE;
+	// Request a modest count of images; the driver may return a few more.
+	// Static per-frame arrays are sized VK_MAX_SWAPCHAIN_SIZE, so there is
+	// headroom for the extras without allocating a full set of resources.
+	uint32_t imageCount = 3;
 	if (swapChainSupport.capabilities.maxImageCount > 0) {
 		imageCount = min(swapChainSupport.capabilities.maxImageCount, imageCount);
 	}
@@ -217,13 +220,10 @@ static void VK_CreateSwapChain() {
 	VK_CHECK(vkCreateSwapchainKHR(vk.device, &createInfo, NULL, &vk.swapchain.handle), "failed to create Swapchain!");
 
 	vkGetSwapchainImagesKHR(vk.device, vk.swapchain.handle, &imageCount, NULL);
-	// The driver may hand back more images than we asked for. Every per-frame
-	// array (gBuffer, asvgf, descriptors, command buffers, ...) is sized
-	// VK_MAX_SWAPCHAIN_SIZE, so never keep more than that or the init loops
-	// indexed by imageCount will scribble over neighbouring globals.
+	// Keep the driver's real count: the static per-frame arrays are sized
+	// VK_MAX_SWAPCHAIN_SIZE, so anything beyond that would overflow them.
 	if (imageCount > VK_MAX_SWAPCHAIN_SIZE) {
-		ri.Printf(PRINT_ALL, "...swapchain returned %u images, clamping to %u\n", imageCount, (uint32_t)VK_MAX_SWAPCHAIN_SIZE);
-		imageCount = VK_MAX_SWAPCHAIN_SIZE;
+		ri.Printf(PRINT_WARNING, "...swapchain returned %u images (max %u); frame resources may be undersized\n", imageCount, (uint32_t)VK_MAX_SWAPCHAIN_SIZE);
 	}
 	vk.swapchain.imageCount = imageCount;
 	vk.swapchain.images = malloc(vk.swapchain.imageCount * sizeof(VkImage));
