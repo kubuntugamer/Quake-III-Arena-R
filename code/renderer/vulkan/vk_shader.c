@@ -191,6 +191,8 @@ void VK_FsrRcasCompShader(vkshader_t* shader) {
 		VK_LoadCompShaderFromVariable(fsrRcasCompShader, (const char *)fsr_rcasComp, sizeof(fsr_rcasComp));
 	}
 	Com_Memcpy(shader, fsrRcasCompShader, sizeof(vkshader_t));
+}
+
 void VK_NrdPackCompShader(vkshader_t* shader) {
 	if (nrdPackCompShader == NULL) {
 		nrdPackCompShader = malloc(sizeof(vkshader_t));
