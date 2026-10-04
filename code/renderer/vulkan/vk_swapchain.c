@@ -148,7 +148,13 @@ static void VK_CreateSwapChain() {
 
 	vk.swapchain.imageFormat = surfaceFormat.format;
 
-	uint32_t imageCount = min(swapChainSupport.capabilities.maxImageCount, VK_MAX_SWAPCHAIN_SIZE);
+	uint32_t imageCount = VK_MAX_SWAPCHAIN_SIZE;
+	if (swapChainSupport.capabilities.maxImageCount > 0) {
+		imageCount = min(swapChainSupport.capabilities.maxImageCount, imageCount);
+	}
+	if (imageCount < swapChainSupport.capabilities.minImageCount) {
+		imageCount = swapChainSupport.capabilities.minImageCount;
+	}
 
 	VkSwapchainCreateInfoKHR createInfo = {0};
 	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -210,7 +216,16 @@ static void VK_CreateSwapChain() {
 
 	VK_CHECK(vkCreateSwapchainKHR(vk.device, &createInfo, NULL, &vk.swapchain.handle), "failed to create Swapchain!");
 
-	vkGetSwapchainImagesKHR(vk.device, vk.swapchain.handle, &vk.swapchain.imageCount, NULL);
+	vkGetSwapchainImagesKHR(vk.device, vk.swapchain.handle, &imageCount, NULL);
+	// The driver may hand back more images than we asked for. Every per-frame
+	// array (gBuffer, asvgf, descriptors, command buffers, ...) is sized
+	// VK_MAX_SWAPCHAIN_SIZE, so never keep more than that or the init loops
+	// indexed by imageCount will scribble over neighbouring globals.
+	if (imageCount > VK_MAX_SWAPCHAIN_SIZE) {
+		ri.Printf(PRINT_ALL, "...swapchain returned %u images, clamping to %u\n", imageCount, (uint32_t)VK_MAX_SWAPCHAIN_SIZE);
+		imageCount = VK_MAX_SWAPCHAIN_SIZE;
+	}
+	vk.swapchain.imageCount = imageCount;
 	vk.swapchain.images = malloc(vk.swapchain.imageCount * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(vk.device, vk.swapchain.handle, &imageCount, &vk.swapchain.images[0]);
 
@@ -252,7 +267,7 @@ static void VK_CreateDepthStencil()
 	imageInfo.arrayLayers = 1;
 	imageInfo.format = vk.swapchain.depthStencilFormat;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;

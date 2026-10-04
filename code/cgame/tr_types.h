@@ -213,7 +213,7 @@ typedef struct {
 #else
 // https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=524
 #define OPENGL_DRIVER_NAME	"libGL.so.1"
-#define VULKAN_DRIVER_NAME    "libvulkan.1"
+#define VULKAN_DRIVER_NAME    "libvulkan.so.1"
 
 #endif	// !defined _WIN32
 

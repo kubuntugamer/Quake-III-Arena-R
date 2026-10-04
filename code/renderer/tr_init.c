@@ -209,7 +209,6 @@ static void InitVulkan(void)
 		R_SetVulkanApi(&tr_api);
 
 		VKimp_Init();
-
 		VK_InitPipelines();
 
 		VK_CreateIndexBuffer(&vk_d.indexbuffer, vk.swapchain.imageCount * VK_INDEX_DATA_SIZE * sizeof(uint32_t));

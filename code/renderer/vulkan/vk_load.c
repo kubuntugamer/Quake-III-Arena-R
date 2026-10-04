@@ -277,8 +277,10 @@ qboolean VK_LoadDeviceFunctions(void)
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdCopyImage, "vkCmdCopyImage");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdDispatch, "vkCmdDispatch");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdWriteTimestamp, "vkCmdWriteTimestamp");
+#ifndef NDEBUG
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdBeginDebugUtilsLabelEXT, "vkCmdBeginDebugUtilsLabelEXT");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdEndDebugUtilsLabelEXT, "vkCmdEndDebugUtilsLabelEXT");
+#endif
 
 	VK_DEVICE_LEVEL_FUNCTION(vkCreateQueryPool, "vkCreateQueryPool");
 	VK_DEVICE_LEVEL_FUNCTION(vkGetQueryPoolResults, "vkGetQueryPoolResults");
@@ -330,7 +332,11 @@ qboolean VK_LoadDeviceFunctions(void)
 	VK_DEVICE_LEVEL_FUNCTION(vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
 	VK_DEVICE_LEVEL_FUNCTION(vkGetBufferDeviceAddress, "vkGetBufferDeviceAddress");
-	VK_DEVICE_LEVEL_FUNCTION(vkWaitForPresentKHR, "vkWaitForPresentKHR");
+	/* present_wait is optional: resolve tolerantly (pacing checks the flag + pointer) */
+	*(void**)&vkWaitForPresentKHR = (void*)vkGetDeviceProcAddr(vk.device, "vkWaitForPresentKHR");
+	if (vkWaitForPresentKHR == NULL) {
+		vk.presentWait = qfalse;
+	}
 
 	/* Vendor-optional entry points: resolve tolerantly, never fail the device.
 	   Use sites check both the extension flag and the pointer. */

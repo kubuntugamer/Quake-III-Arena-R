@@ -59,6 +59,7 @@ void VK_CreateImage(vkimage_t* image, uint32_t width, uint32_t height, VkFormat 
 	VK_CreateImageArray(image, width, height, format, usage, mipLevels, 1);
 }
 
+
 void VK_CreateCubeMap(vkimage_t* image, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels, uint32_t arrayLayers) {
 	image->extent = (VkExtent3D){ width, height, 1 };
 	image->mipLevels = mipLevels;

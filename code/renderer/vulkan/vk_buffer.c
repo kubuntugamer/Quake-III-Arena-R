@@ -49,8 +49,7 @@ void VK_CreateRayTracingScratchBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize
 void VK_CreateShaderBindingTableBuffer(vkbuffer_t* buffer, VkDeviceSize allocSize) {
 	buffer->allocSize = allocSize;
 	VK_CreateBufferMemory(allocSize, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &buffer->buffer, &buffer->memory);
-	VK_CHECK(vkMapMemory(vk.device, buffer->memory, 0, buffer->allocSize, 0, (void**)(&buffer->p)), "failed to Map Memory!");
-}
+	VK_CHECK(vkMapMemory(vk.device, buffer->memory, 0, buffer->allocSize, 0, (void**)(&buffer->p)), "failed to Map Memory!");}
 
 void VK_UploadBufferDataOffset(vkbuffer_t* buffer, VkDeviceSize offset, VkDeviceSize size, const byte* data) {
     if (offset + size > buffer->allocSize) {
@@ -82,16 +81,12 @@ void VK_UnmapBuffer(vkbuffer_t* buffer) {
 }
 
 void VK_DestroyBuffer(vkbuffer_t* buffer)
-{
-	if (buffer->p) {
-		vkUnmapMemory(vk.device, buffer->memory);
+{	if (buffer->p) {		vkUnmapMemory(vk.device, buffer->memory);
 		buffer->p = NULL;
 	}
-	if (buffer->buffer != NULL) {
-		vkDestroyBuffer(vk.device, buffer->buffer, NULL);
+	if (buffer->buffer != NULL) {		vkDestroyBuffer(vk.device, buffer->buffer, NULL);
 	}
-	if (buffer->memory != NULL) {
-		vkFreeMemory(vk.device, buffer->memory, NULL);
+	if (buffer->memory != NULL) {		vkFreeMemory(vk.device, buffer->memory, NULL);
 	}
 	memset(buffer, 0, sizeof(vkbuffer_t));
 }
