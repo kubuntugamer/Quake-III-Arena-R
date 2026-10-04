@@ -14,7 +14,9 @@ static const char* requiredDeviceExtensions[] = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-// Enabled when the driver offers them (queried per physical device, never fatal)
+// Enabled when the driver offers them (queried per physical device, never fatal).
+// AMD vendor set: only anti_lag/coherent/core-props are actively used; the
+// rest are enabled when present so future shader work can rely on them.
 static const char* optionalDeviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
 		VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME,
@@ -22,10 +24,35 @@ static const char* optionalDeviceExtensions[] = {
 		VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 		VK_KHR_PRESENT_ID_EXTENSION_NAME,
 		VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
+		VK_NV_LOW_LATENCY_2_EXTENSION_NAME,
+		VK_AMD_ANTI_LAG_EXTENSION_NAME,
+		VK_AMD_BUFFER_MARKER_EXTENSION_NAME,
+		VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME,
+		VK_AMD_DISPLAY_NATIVE_HDR_EXTENSION_NAME,
+		VK_AMD_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
+		VK_AMD_GCN_SHADER_EXTENSION_NAME,
+		VK_AMD_GPA_INTERFACE_EXTENSION_NAME,
+		VK_AMD_GPU_SHADER_HALF_FLOAT_EXTENSION_NAME,
+		VK_AMD_GPU_SHADER_INT16_EXTENSION_NAME,
+		VK_AMD_MEMORY_OVERALLOCATION_BEHAVIOR_EXTENSION_NAME,
+		VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME,
+		VK_AMD_NEGATIVE_VIEWPORT_HEIGHT_EXTENSION_NAME,
+		VK_AMD_PIPELINE_COMPILER_CONTROL_EXTENSION_NAME,
+		VK_AMD_RASTERIZATION_ORDER_EXTENSION_NAME,
+		VK_AMD_SHADER_BALLOT_EXTENSION_NAME,
+		VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME,
+		VK_AMD_SHADER_CORE_PROPERTIES_2_EXTENSION_NAME,
+		VK_AMD_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_EXTENSION_NAME,
+		VK_AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_EXTENSION_NAME,
+		VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME,
+		VK_AMD_SHADER_IMAGE_LOAD_STORE_LOD_EXTENSION_NAME,
+		VK_AMD_SHADER_INFO_EXTENSION_NAME,
+		VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME,
+		VK_AMD_TEXTURE_GATHER_BIAS_LOD_EXTENSION_NAME,
 #endif
 };
 
-#define VK_MAX_ENABLED_DEVICE_EXTENSIONS 16
+#define VK_MAX_ENABLED_DEVICE_EXTENSIONS 48
 static const char* enabledDeviceExtensions[VK_MAX_ENABLED_DEVICE_EXTENSIONS];
 static uint32_t enabledDeviceExtensionCount = 0;
 
@@ -248,12 +275,16 @@ static void VK_PickPhysicalDevice()
 	// rtx properties (KHR)
 	vk.accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
 	vk.accelProperties.pNext = NULL;
+	vk.amdCoreProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD;
+	vk.amdCoreProperties.pNext = NULL;
 	vk.rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
 	vk.rayTracingProperties.pNext = NULL;
 	vk.deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-	vk.deviceProperties2.pNext = &vk.accelProperties;
+	vk.deviceProperties2.pNext = &vk.amdCoreProperties;
+	vk.amdCoreProperties.pNext = &vk.accelProperties;
 	vk.accelProperties.pNext = &vk.rayTracingProperties;
 	vkGetPhysicalDeviceProperties2(vk.physicalDevice, &vk.deviceProperties2);
+	vk.amdComputeUnits = vk.amdCoreProperties.activeComputeUnitCount;
 
 	// device limits
 	VkPhysicalDeviceLimits limits = vk.deviceProperties.limits;
@@ -538,6 +569,12 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
 			}
 			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
 				vk.presentWait = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_AMD_ANTI_LAG_EXTENSION_NAME)) {
+				vk.antiLag = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_NV_LOW_LATENCY_2_EXTENSION_NAME)) {
+				vk.reflex = qtrue;
 			}
 			ri.Printf(PRINT_ALL, "...enabling optional device extension %s\n", optionalDeviceExtensions[i]);
 		}

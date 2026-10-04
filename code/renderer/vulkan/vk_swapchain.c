@@ -44,6 +44,26 @@ void VK_SetupSwapchain()
 	vk.swapchain.CurrentFramebuffer = VK_CurrentFramebuffer;
 
 	ri.Printf(PRINT_ALL, "...using present mode %s\n", VK_PresentModeName(vk.swapchain.presentMode));
+
+	// vendor latency layers (all guarded; no-ops when unsupported)
+	if (vk.antiLag && vkAntiLagUpdateAMD != NULL) {
+		VkAntiLagDataAMD antiLagData = { 0 };
+		antiLagData.sType = VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD;
+		antiLagData.mode = VK_ANTI_LAG_MODE_DRIVER_CONTROL_AMD;
+		antiLagData.maxFPS = 0;
+		antiLagData.pPresentationInfo = NULL;
+		vkAntiLagUpdateAMD(vk.device, &antiLagData);
+		ri.Printf(PRINT_ALL, "...AMD anti-lag engaged (driver-controlled)\n");
+	}
+	if (vk.reflex && vkSetLatencySleepModeNV != NULL) {
+		VkLatencySleepModeInfoNV sleepMode = { 0 };
+		sleepMode.sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_MODE_INFO_NV;
+		sleepMode.lowLatencyMode = VK_TRUE;
+		sleepMode.lowLatencyBoost = VK_TRUE; // NVIDIA boost: raise clocks when Reflex engages
+		sleepMode.minimumIntervalUs = 0;
+		vkSetLatencySleepModeNV(vk.device, vk.swapchain.handle, &sleepMode);
+		ri.Printf(PRINT_ALL, "...NVIDIA Reflex sleep mode on (boost on)\n");
+	}
 }
 
 // Idle + rebuild the swapchain (same window). Enough when only the present
@@ -466,6 +486,17 @@ void VK_BeginFrame()
 //        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT);
 }
 
+// NVIDIA Reflex markers (LDAT timeline); no-ops unless low_latency2 is active
+static void VK_LatencyMarker(VkLatencyMarkerNV marker, uint64_t presentID) {
+	if (vk.reflex && vkSetLatencyMarkerNV != NULL) {
+		VkSetLatencyMarkerInfoNV info = { 0 };
+		info.sType = VK_STRUCTURE_TYPE_SET_LATENCY_MARKER_INFO_NV;
+		info.presentID = presentID;
+		info.marker = marker;
+		vkSetLatencyMarkerNV(vk.device, vk.swapchain.handle, &info);
+	}
+}
+
 void VK_EndFrame()
 {
 	if (!vk.swapchain.frameStarted) return;
@@ -490,7 +521,9 @@ void VK_EndFrame()
 	submitInfo.signalSemaphoreCount = sizeof(signalSemaphores) / sizeof(VkSemaphore);
 	submitInfo.pSignalSemaphores = &signalSemaphores[0];
 
+	VK_LatencyMarker(VK_LATENCY_MARKER_RENDERSUBMIT_START_NV, vk.swapchain.presentId);
 	VK_CHECK(vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.swapchain.inFlightFences[vk.swapchain.currentImage]), "failed to submit draw command buffer!");
+	VK_LatencyMarker(VK_LATENCY_MARKER_RENDERSUBMIT_END_NV, vk.swapchain.presentId);
 	//VK_CHECK(vkQueueWaitIdle(vk.graphicsQueue), "failed to wait for Queue execution!");
 
 	VkSwapchainKHR swapChains[] = { vk.swapchain.handle };
@@ -514,21 +547,38 @@ void VK_EndFrame()
 		presentInfo.pNext = &presentModeInfo;
 		vk.swapchain.presentMode = desiredMode;
 	}
-	// present_id: tag every present for pacing/debug
+	// optional present-chain, in order: [mode-switch] -> [present-id] -> [anti-lag]
 	VkPresentIdKHR presentIdInfo = { 0 };
+	VkAntiLagPresentationInfoAMD antiLagInfo = { 0 };
+	void *chainTail = presentInfo.pNext; // set above when mode-switching
+	vk.swapchain.presentId++;
 	if (vk.presentId) {
-		vk.swapchain.presentId++;
 		presentIdInfo.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR;
 		presentIdInfo.swapchainCount = 1;
 		presentIdInfo.pPresentIds = &vk.swapchain.presentId;
-		if (presentInfo.pNext == &presentModeInfo) {
+		if (chainTail == &presentModeInfo) {
 			presentModeInfo.pNext = &presentIdInfo;
 		} else {
 			presentInfo.pNext = &presentIdInfo;
 		}
+		chainTail = &presentIdInfo;
 	}
-
+	// AMD anti-lag: report each present (driver paces when engaged above)
+	if (vk.antiLag && vkAntiLagUpdateAMD != NULL) {
+		antiLagInfo.sType = VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD;
+		antiLagInfo.stage = VK_ANTI_LAG_STAGE_PRESENT_AMD;
+		antiLagInfo.frameIndex = vk.swapchain.presentId;
+		if (chainTail == &presentModeInfo) {
+			presentModeInfo.pNext = &antiLagInfo;
+		} else if (chainTail == &presentIdInfo) {
+			presentIdInfo.pNext = &antiLagInfo;
+		} else {
+			presentInfo.pNext = &antiLagInfo;
+		}
+	}
+	VK_LatencyMarker(VK_LATENCY_MARKER_PRESENT_START_NV, vk.swapchain.presentId);
 	VkResult res = vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+	VK_LatencyMarker(VK_LATENCY_MARKER_PRESENT_END_NV, vk.swapchain.presentId);
 	if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
 		// window resized or surface changed: rebuild swapchain; a full
 		// vid_restart follows automatically if the extent itself changed

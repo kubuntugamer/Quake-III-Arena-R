@@ -149,6 +149,10 @@ PFN_vkGetRayTracingShaderGroupHandlesKHR			vkGetRayTracingShaderGroupHandlesKHR;
 PFN_vkCmdTraceRaysKHR								vkCmdTraceRaysKHR;
 PFN_vkGetBufferDeviceAddress						vkGetBufferDeviceAddress;
 PFN_vkWaitForPresentKHR							vkWaitForPresentKHR;
+PFN_vkAntiLagUpdateAMD							vkAntiLagUpdateAMD;
+PFN_vkSetLatencySleepModeNV						vkSetLatencySleepModeNV;
+PFN_vkLatencySleepNV							vkLatencySleepNV;
+PFN_vkSetLatencyMarkerNV						vkSetLatencyMarkerNV;
 
 qboolean VK_LoadGlobalFunctions(void)
 {
@@ -325,6 +329,13 @@ qboolean VK_LoadDeviceFunctions(void)
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
 	VK_DEVICE_LEVEL_FUNCTION(vkGetBufferDeviceAddress, "vkGetBufferDeviceAddress");
 	VK_DEVICE_LEVEL_FUNCTION(vkWaitForPresentKHR, "vkWaitForPresentKHR");
+
+	/* Vendor-optional entry points: resolve tolerantly, never fail the device.
+	   Use sites check both the extension flag and the pointer. */
+	*(void**)&vkAntiLagUpdateAMD = (void*)vkGetDeviceProcAddr(vk.device, "vkAntiLagUpdateAMD");
+	*(void**)&vkSetLatencySleepModeNV = (void*)vkGetDeviceProcAddr(vk.device, "vkSetLatencySleepModeNV");
+	*(void**)&vkLatencySleepNV = (void*)vkGetDeviceProcAddr(vk.device, "vkLatencySleepNV");
+	*(void**)&vkSetLatencyMarkerNV = (void*)vkGetDeviceProcAddr(vk.device, "vkSetLatencyMarkerNV");
 
     return qtrue;
 }

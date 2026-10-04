@@ -1165,6 +1165,7 @@ typedef struct {
 	VkPhysicalDeviceProperties	deviceProperties;
 	VkPhysicalDeviceProperties2 deviceProperties2;
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties;
+	VkPhysicalDeviceShaderCoreProperties2AMD amdCoreProperties;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingProperties;
 	qboolean					anisotropy; // samplerAnisotropy was available and enabled
 	qboolean					rtMaintenance1; // VK_KHR_ray_tracing_maintenance1 enabled
@@ -1172,6 +1173,10 @@ typedef struct {
 	qboolean					swapchainMaintenance1; // VK_KHR_swapchain_maintenance1 enabled
 	qboolean					presentId; // VK_KHR_present_id enabled
 	qboolean					presentWait; // VK_KHR_present_wait enabled
+	qboolean					antiLag; // VK_AMD_anti_lag enabled (driver-paced presents)
+	qboolean					reflex; // VK_NV_low_latency2 enabled (markers + boost)
+	qboolean					coherentMemory; // a DEVICE_COHERENT heap was picked for uploads
+	uint32_t					amdComputeUnits; // from VK_AMD_shader_core_properties2
 
 	vkqueueFamilyIndices_t		queryFamilyIndices;
 
@@ -2014,6 +2019,7 @@ void VK_BindPipeline(vkpipeline_t* pipeline);
 void VK_DrawIndexed(vkbuffer_t *idxBuffer, int count, uint32_t firstIndex, uint32_t vertexOffset);
 void VK_Draw(int count);
 uint32_t VK_FindMemoryTypeIndex(uint32_t memoryTypeBits, VkMemoryPropertyFlags properties);
+uint32_t VK_FindMemoryTypeIndexPreferCoherent(uint32_t memoryTypeBits, VkMemoryPropertyFlags properties);
 uint32_t VK_HostVisibleMemoryIndex();
 uint32_t VK_DeviceLocalMemoryIndex();
 void VK_BindIndexBuffer(vkbuffer_t *idxBuffer, VkDeviceSize offset);

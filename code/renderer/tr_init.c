@@ -1057,14 +1057,18 @@ void GfxInfo_f( void )
 				vram += memProps.memoryHeaps[i].size;
 			}
 		}
-		ri.Printf(PRINT_ALL, "VRAM: %.0f MB device-local | anisotropy: %s | RT maintenance1: %s | RT positionFetch: %s | present mode: %s\n",
+		ri.Printf(PRINT_ALL, "VRAM: %.0f MB device-local | anisotropy: %s | RT maintenance1: %s | RT positionFetch: %s | present mode: %s | anti-lag: %s | reflex: %s | coherent-heap: %s | CUs: %u\n",
 			(double)vram / (1024.0 * 1024.0),
 			vk.anisotropy ? "yes" : "no",
 			vk.rtMaintenance1 ? "yes" : "no",
 			vk.rtPositionFetch ? "yes" : "no",
 			(r_presentMode != NULL && r_presentMode->integer == 0) ? "FIFO" :
 			(r_presentMode != NULL && r_presentMode->integer == 2) ? "IMMEDIATE" :
-			(r_presentMode != NULL && r_presentMode->integer == 3) ? "LATEST_READY" : "MAILBOX");
+			(r_presentMode != NULL && r_presentMode->integer == 3) ? "LATEST_READY" : "MAILBOX",
+			vk.antiLag ? "yes" : "no",
+			vk.reflex ? "yes" : "no",
+			vk.coherentMemory ? "yes" : "no",
+			vk.amdComputeUnits);
 	}
 
 	// rendering primitives

@@ -222,5 +222,9 @@ extern PFN_vkGetRayTracingShaderGroupHandlesKHR			vkGetRayTracingShaderGroupHand
 extern PFN_vkCmdTraceRaysKHR								vkCmdTraceRaysKHR;
 extern PFN_vkGetBufferDeviceAddress						vkGetBufferDeviceAddress;
 extern PFN_vkWaitForPresentKHR							vkWaitForPresentKHR;
+extern PFN_vkAntiLagUpdateAMD							vkAntiLagUpdateAMD;
+extern PFN_vkSetLatencySleepModeNV						vkSetLatencySleepModeNV;
+extern PFN_vkLatencySleepNV							vkLatencySleepNV;
+extern PFN_vkSetLatencyMarkerNV						vkSetLatencyMarkerNV;
 
 #endif

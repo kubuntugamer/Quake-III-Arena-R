@@ -239,6 +239,33 @@ void VK_EndSingleTimeCommands(VkCommandBuffer *commandBuffer) {
 /*
 ** MEMORY
 */
+static uint32_t VK_TryMemoryTypeIndex(uint32_t memoryTypeBits, VkMemoryPropertyFlags properties) {
+	VkPhysicalDeviceMemoryProperties prop = { 0 };
+	vkGetPhysicalDeviceMemoryProperties(vk.physicalDevice, &prop);
+	for (uint32_t i = 0; i < prop.memoryTypeCount; ++i) {
+		if ((memoryTypeBits & (1u << i)) &&
+			((prop.memoryTypes[i].propertyFlags & properties) == properties)) {
+			return i;
+		}
+	}
+	return 0xFFFFFFFFu;
+}
+
+// APU win (AMD device-coherent heaps): prefer DEVICE_COHERENT memory for
+// host-visible allocations when the driver offers such a type. The flag is
+// just bits: drivers without the AMD extension have no matching type and
+// fall through to the plain path, so this is safe everywhere.
+uint32_t VK_FindMemoryTypeIndexPreferCoherent(uint32_t memoryTypeBits, VkMemoryPropertyFlags properties) {
+	if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+		uint32_t idx = VK_TryMemoryTypeIndex(memoryTypeBits, properties | VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
+		if (idx != 0xFFFFFFFFu) {
+			vk.coherentMemory = qtrue;
+			return idx;
+		}
+	}
+	return VK_FindMemoryTypeIndex(memoryTypeBits, properties);
+}
+
 void VK_CreateBufferMemory(VkDeviceSize size, VkBufferUsageFlags usage,
 	VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
 
@@ -265,7 +292,7 @@ void VK_CreateBufferMemory(VkDeviceSize size, VkBufferUsageFlags usage,
 		VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		&allocFlagsInfo,
 		memReq.size,
-		VK_FindMemoryTypeIndex(memReq.memoryTypeBits, properties)
+		VK_FindMemoryTypeIndexPreferCoherent(memReq.memoryTypeBits, properties)
 	};
 
 	VK_CHECK(vkAllocateMemory(vk.device, &memAllocInfo, NULL, bufferMemory), "failed to allocate Memory!");
