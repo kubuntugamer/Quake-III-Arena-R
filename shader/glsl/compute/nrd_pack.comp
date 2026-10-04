@@ -1,0 +1,79 @@
+// NRD preparation pack pass (phase A of NRD integration; no consumer yet).
+// Packs our G-buffer into NRD front-end formats, mirroring
+// NRD_FrontEnd_PackNormalAndRoughness with LINEAR roughness encoding
+// (integrator must define NRD_ROUGHNESS_ENCODING_LINEAR when wiring NRD):
+//   nrdNormalRoughness (RGBA8): best-fit normal mapped to [0,1] + roughness
+//   nrdViewZ           (R16F):   linear view-space depth from world position
+//   nrdMotion          (RGBA16F): screen-space pixel motion (previous - current)
+// Motion audit: our motion is NDC-delta, sign (prev - curr) matches NRD, and
+// no camera jitter exists anywhere in the raytracer/TAA, so it is inherently
+// non-jittered as NRD requires. Sky/miss sentinels (-1,-1,-1,9999) are passed
+// through; NRD treats extreme motion as disocclusion.
+#version 460
+#extension GL_GOOGLE_include_directive    : enable
+
+#include "../constants.h"
+
+layout(binding = BINDING_OFFSET_GLOBAL_UBO, set = 0) uniform global_ubo
+{
+	GlobalUbo ubo;
+};
+
+layout(binding = BINDING_OFFSET_GBUFFER_NORMAL, set = 0, rgba32f) uniform image2D normalGBuffer;
+layout(binding = BINDING_OFFSET_GBUFFER_POS, set = 0, rgba32f) uniform image2D posGBuffer;
+layout(binding = BINDING_OFFSET_GBUFFER_VIEW_DIR, set = 0, rgba32f) uniform image2D viewGBuffer;
+layout(binding = BINDING_OFFSET_GBUFFER_MOTION, set = 0, rgba16f) uniform image2D motionGBuffer;
+
+layout(binding = BINDING_OFFSET_NRD_NORMAL_ROUGHNESS, set = 0, rgba8) uniform image2D nrdNormalRoughness;
+layout(binding = BINDING_OFFSET_NRD_VIEWZ, set = 0, r16f) uniform image2D nrdViewZ;
+layout(binding = BINDING_OFFSET_NRD_MOTION, set = 0, rgba16f) uniform image2D nrdMotion;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+float nrdRoughnessFromMaterial(uint material) {
+	uint kind = material & MATERIAL_KIND_MASK;
+	if ((material & MATERIAL_FLAG_MIRROR) != 0u || kind == MATERIAL_KIND_CHROME) {
+		return 0.0;
+	}
+	if (kind == MATERIAL_KIND_GLASS) {
+		return 0.05;
+	}
+	if (kind == MATERIAL_KIND_WATER) {
+		return 0.2;
+	}
+	if (kind == MATERIAL_KIND_SKY || (material & MATERIAL_FLAG_LIGHT) != 0u ||
+		kind == MATERIAL_KIND_LAVA || kind == MATERIAL_KIND_SLIME) {
+		return 1.0;
+	}
+	return 0.85; // default diffuse
+}
+
+void main() {
+	ivec2 ipos = ivec2(gl_GlobalInvocationID.xy);
+
+	vec3 n = imageLoad(normalGBuffer, ipos).xyz;
+	vec3 worldPos = imageLoad(posGBuffer, ipos).xyz;
+	vec4 viewSample = imageLoad(viewGBuffer, ipos);
+	uint material = uint(viewSample.w);
+	vec4 motion = imageLoad(motionGBuffer, ipos);
+
+	// normal: best-fit + [0,1] mapping (NRD default RGBA8 path); guard zero normals (sky)
+	float roughness = nrdRoughnessFromMaterial(material);
+	vec3 N;
+	if (dot(n, n) < 1e-12 || material == MATERIAL_KIND_SKY) {
+		N = vec3(0.0, 0.0, 1.0);
+		roughness = 1.0;
+	} else {
+		N = n / max(abs(n.x), max(abs(n.y), abs(n.z)));
+		N = N * 0.5 + 0.5;
+	}
+	imageStore(nrdNormalRoughness, ipos, vec4(N, roughness));
+
+	// linear view-space depth from world position
+	vec4 viewPos = ubo.viewMat * vec4(worldPos, 1.0);
+	imageStore(nrdViewZ, ipos, vec4(max(-viewPos.z, 0.0)));
+
+	// NDC delta -> pixel motion (previous - current, non-jittered by construction)
+	vec2 res = vec2(float(ubo.width), float(ubo.height));
+	imageStore(nrdMotion, ipos, vec4(motion.xy * 0.5 * res, 0.0, 1.0));
+}

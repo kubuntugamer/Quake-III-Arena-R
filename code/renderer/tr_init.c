@@ -178,6 +178,7 @@ cvar_t* rt_brightness;
 cvar_t* rt_tonemapping_reinhard;
 cvar_t* rt_fsr;
 cvar_t* rt_fsrSharpness;
+cvar_t* rt_nrdPack;
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral )
 {
@@ -430,6 +431,13 @@ static void InitVulkan(void)
 				VK_FinishDescriptor(&vk_d.accelerationStructures.resultImage[i].descriptor_set);
 				
 				VK_CreateImage(&vk_d.accelerationStructures.accumulationImage[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
+				// NRD prep outputs (packed front-end formats)
+				VK_CreateImage(&vk_d.accelerationStructures.nrdNormalRoughness[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
+				VK_TransitionImage(&vk_d.accelerationStructures.nrdNormalRoughness[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+				VK_CreateImage(&vk_d.accelerationStructures.nrdViewZ[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
+				VK_TransitionImage(&vk_d.accelerationStructures.nrdViewZ[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+				VK_CreateImage(&vk_d.accelerationStructures.nrdMotion[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
+				VK_TransitionImage(&vk_d.accelerationStructures.nrdMotion[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 				VK_CreateSampler(&vk_d.accelerationStructures.accumulationImage[i], VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 				VK_TransitionImage(&vk_d.accelerationStructures.accumulationImage[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
@@ -1286,6 +1294,7 @@ void R_Register( void )
 	rt_tonemapping_reinhard = ri.Cvar_Get("rt_tonemapping_reinhard", "1", 0);
 	rt_fsr = ri.Cvar_Get("rt_fsr", "0", 0);
 	rt_fsrSharpness = ri.Cvar_Get("rt_fsrSharpness", "0.5", 0);
+	rt_nrdPack = ri.Cvar_Get("rt_nrdPack", "0", 0);
 
 	// make sure all the commands added here are also
 	// removed in R_Shutdown
@@ -1559,6 +1568,9 @@ void RE_Shutdown( qboolean destroyWindow ) {
 				VK_DestroyImage(&vk_d.accelerationStructures.resultImage[i]);
 				VK_DestroyImage(&vk_d.accelerationStructures.fsrImage[i]);
 				VK_DestroyImage(&vk_d.accelerationStructures.accumulationImage[i]);
+				VK_DestroyImage(&vk_d.accelerationStructures.nrdNormalRoughness[i]);
+				VK_DestroyImage(&vk_d.accelerationStructures.nrdViewZ[i]);
+				VK_DestroyImage(&vk_d.accelerationStructures.nrdMotion[i]);
 			}
 			VK_DestroyBuffer(&vk_d.scratchBuffer);
 			VK_DestroyImage(&vk_d.blueNoiseTex);

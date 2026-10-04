@@ -882,6 +882,17 @@ static void RB_TraceRays() {
 	BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.gBuffer[vk.swapchain.currentImage].viewDir.handle);
 	BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.gBuffer[vk.swapchain.currentImage].objectInfo.handle);
 
+	// NRD prep pack (phase A; outputs consumed when NRD lands, rt_nrdPack gates cost)
+	if (rt_nrdPack->integer == 1) {
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.gBuffer[vk.swapchain.currentImage].motion.handle);
+		VK_BindComputePipeline(&vk_d.accelerationStructures.nrdPackPipeline);
+		VK_BindCompute2DescriptorSets(&vk_d.accelerationStructures.nrdPackPipeline, &vk_d.computeDescriptor[vk.swapchain.currentImage], &vk_d.imageDescriptor);
+		VK_Dispatch((vk.swapchain.extent.width), (vk.swapchain.extent.height), 1);
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.accelerationStructures.nrdNormalRoughness[vk.swapchain.currentImage].handle);
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.accelerationStructures.nrdViewZ[vk.swapchain.currentImage].handle);
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.accelerationStructures.nrdMotion[vk.swapchain.currentImage].handle);
+	}
+
 	// reflections/refractions
 	PROFILER_SET_MARKER(vk.swapchain.CurrentCommandBuffer(), PROFILER_REFLECTION_REFRACTION_BEGIN);
 	VK_BindRayTracingPipeline(&vk_d.reflectRaysPipeline);
