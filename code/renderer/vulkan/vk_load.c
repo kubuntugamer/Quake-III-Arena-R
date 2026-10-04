@@ -29,8 +29,11 @@ PFN_vkCreateWin32SurfaceKHR						vkCreateWin32SurfaceKHR;
 PFN_vkCreateMacOSSurfaceMVK                     vkCreateMacOSSurfaceMVK;
 #elif defined( __linux__ )
 PFN_vkCreateXlibSurfaceKHR				vkCreateXlibSurfaceKHR;
+PFN_vkCreateWaylandSurfaceKHR			vkCreateWaylandSurfaceKHR;
 #endif
 PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR;
+
+extern qboolean VK_UsingWayland;
 PFN_vkGetPhysicalDeviceFeatures					vkGetPhysicalDeviceFeatures;
 PFN_vkGetPhysicalDeviceProperties				vkGetPhysicalDeviceProperties;
 PFN_vkGetPhysicalDeviceProperties2				vkGetPhysicalDeviceProperties2;
@@ -179,7 +182,11 @@ qboolean VK_LoadInstanceFunctions(void)
 #elif defined(__APPLE__)
     VK_INSTANCE_LEVEL_FUNCTION(vkCreateMacOSSurfaceMVK, "vkCreateMacOSSurfaceMVK");
 #elif defined( __linux__ )
-    VK_INSTANCE_LEVEL_FUNCTION(vkCreateXlibSurfaceKHR, "vkCreateXlibSurfaceKHR");
+    if ( VK_UsingWayland ) {
+        VK_INSTANCE_LEVEL_FUNCTION(vkCreateWaylandSurfaceKHR, "vkCreateWaylandSurfaceKHR");
+    } else {
+        VK_INSTANCE_LEVEL_FUNCTION(vkCreateXlibSurfaceKHR, "vkCreateXlibSurfaceKHR");
+    }
 #endif
     VK_INSTANCE_LEVEL_FUNCTION(vkDestroySurfaceKHR, "vkDestroySurfaceKHR");
 	

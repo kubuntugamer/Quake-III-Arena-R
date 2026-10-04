@@ -1002,7 +1002,7 @@ Vulkan
 ==============================================================================
 */
 #define VK_MAX_SWAPCHAIN_SIZE 8
-#define VK_MAX_SURFACE_FORMAT_ARRAY_SIZE 10
+#define VK_MAX_SURFACE_FORMAT_ARRAY_SIZE 128
 #define VK_INDEX_DATA_SIZE 1024 * 1024
 #define VK_VERTEX_ATTRIBUTE_DATA_SIZE 512 * 1024
 #define VK_MAX_NUM_PIPELINES 128

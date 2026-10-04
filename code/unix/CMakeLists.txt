@@ -3,6 +3,12 @@
 file(GLOB_RECURSE SOURCES *.cpp *.c *.m *.mm *.hpp *.h ../qcommon/*.cpp ../qcommon/*.c ../qcommon/*.m ../qcommon/*.mm ../qcommon/*.hpp ../qcommon/*.h ../client/*.cpp ../client/*.c ../client/*.m ../client/*.mm ../client/*.hpp ../client/*.h ../server/*.cpp ../server/*.c ../server/*.m ../server/*.mm ../server/*.hpp ../server/*.h)
 
 list(APPEND SOURCES "../game/q_math.c")
+
+# generated Wayland xdg-shell client code (wayland-scanner output in code/unix/xdg)
+list(APPEND SOURCES "xdg/xdg-shell-protocol.c")
+
+# generated Wayland xdg-shell client code (wayland-scanner output in code/unix/xdg)
+list(APPEND SOURCES "xdg/xdg-shell-protocol.c")
 list(APPEND SOURCES "../game/bg_misc.c")
 list(APPEND SOURCES "../game/q_shared.c")
 list(APPEND SOURCES "../game/q_shared.h")
@@ -40,6 +46,7 @@ include_directories(${CMAKE_SOURCE_DIR}/code/botlib)
 # EXECUTABLE
 add_executable(${APP_UNIX} ${SOURCES})
 target_link_libraries(${APP_UNIX} "${X11_LIBRARIES}")
+target_link_libraries(${APP_UNIX} wayland-client)
 target_link_libraries(${APP_UNIX} "${CMAKE_DL_LIBS}")
 # NOTE: Vulkan resolved at runtime via dlopen (see renderer/CMakeLists.txt)
 target_link_libraries(${APP_UNIX} "-lm")

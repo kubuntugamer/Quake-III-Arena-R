@@ -32,6 +32,7 @@
 #define VK_USE_PLATFORM_XLIB_KHR
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_wayland.h>
 
 #else
 
@@ -72,6 +73,8 @@ extern PFN_vkCreateWin32SurfaceKHR						vkCreateWin32SurfaceKHR;
 extern PFN_vkCreateMacOSSurfaceMVK                     vkCreateMacOSSurfaceMVK;
 #elif defined( __linux__ )
 extern PFN_vkCreateXlibSurfaceKHR				vkCreateXlibSurfaceKHR;
+extern PFN_vkCreateWaylandSurfaceKHR			vkCreateWaylandSurfaceKHR;
+extern PFN_vkCreateWaylandSurfaceKHR			vkCreateWaylandSurfaceKHR;
 #endif
 extern PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR;
 

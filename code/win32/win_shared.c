@@ -122,6 +122,13 @@ int Sys_UringHandleRead( void *file, void *buf, int len ) {
 	(void)file; (void)buf; (void)len;
 	return 0;
 }
+int Sys_UringPrefetch( void *file, int len, long off ) {
+	(void)file; (void)len; (void)off;
+	return 0;
+}
+int Sys_UringPrefetchPump( void ) {
+	return 0;
+}
 
 /* stage 2 async stubs */
 int Sys_UringReadAsync( void *file, void *buf, int len, long off, unsigned long long tag ) {

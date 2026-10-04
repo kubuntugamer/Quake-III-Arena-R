@@ -1,5 +1,15 @@
 #include "../tr_local.h"
 
+#ifdef __linux__
+#include <wayland-client.h>
+#include <vulkan/vulkan_wayland.h>
+#endif
+
+/* Wayland backend was chosen by the unix layer at window-create time. */
+extern qboolean VK_UsingWayland;
+extern void    *VK_WaylandDisplay;
+extern void    *VK_WaylandSurface;
+
 static void VK_BufferMemoryBarrier(VkCommandBuffer cb, VkBuffer* buffer,
 	VkPipelineStageFlags srcStages, VkPipelineStageFlags dstStages,
 	VkAccessFlags srcAccess, VkAccessFlags dstAccess);

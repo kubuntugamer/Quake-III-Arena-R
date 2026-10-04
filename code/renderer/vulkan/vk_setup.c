@@ -61,6 +61,11 @@ static const char* validationLayers[] = {
 		"VK_LAYER_KHRONOS_validation"
 };
 
+/* Wayland backend was chosen by the unix layer at window-create time. */
+qboolean VK_UsingWayland = qfalse;
+void    *VK_WaylandDisplay = NULL;
+void    *VK_WaylandSurface = NULL;
+
 static const char* instanceExtensions[] = {
 #ifndef NDEBUG
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
@@ -140,24 +145,37 @@ void VK_Destroy() {
 
 static void VK_CreateInstance() {
 	// check extensions availability
-	{
-		uint32_t count = 0;
-		vkEnumerateInstanceExtensionProperties(NULL, &count, NULL);
-		VkExtensionProperties *extension_properties = malloc(count * sizeof(VkExtensionProperties));
-		vkEnumerateInstanceExtensionProperties(NULL, &count, &extension_properties[0]);
+	uint32_t count = 0;
+	vkEnumerateInstanceExtensionProperties(NULL, &count, NULL);
+	VkExtensionProperties *extension_properties = malloc(count * sizeof(VkExtensionProperties));
+	vkEnumerateInstanceExtensionProperties(NULL, &count, &extension_properties[0]);
 
-		for (int i = 0; i < (sizeof(instanceExtensions) / sizeof(instanceExtensions[0])); i++) {
-			qboolean supported = qfalse;
-			for (int j = 0; j < count; j++) {
-				if (!strcmp(extension_properties[j].extensionName, instanceExtensions[i])) {
-					supported = qtrue;
-					break;
-				}
-			}
-			if (!supported) ri.Error(ERR_FATAL, "Vulkan: required instance extension is not available: %s", instanceExtensions[i]);
+	// Build the instance extension list; use the Wayland surface extension
+	// when a Wayland window was created instead of the Xlib one.
+	int extCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
+	const char *exts[64];
+	for (int i = 0; i < extCount; i++) exts[i] = instanceExtensions[i];
+#ifdef __linux__
+	if ( VK_UsingWayland ) {
+		int found = -1;
+		for (int i = 0; i < extCount; i++) {
+			if (!strcmp(exts[i], VK_KHR_XLIB_SURFACE_EXTENSION_NAME)) { found = i; break; }
 		}
-		free(extension_properties);
+		if (found >= 0) exts[found] = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
 	}
+#endif
+
+	for (int i = 0; i < extCount; i++) {
+		qboolean supported = qfalse;
+		for (int j = 0; j < count; j++) {
+			if (!strcmp(extension_properties[j].extensionName, exts[i])) {
+				supported = qtrue;
+				break;
+			}
+		}
+		if (!supported) ri.Error(ERR_FATAL, "Vulkan: required instance extension is not available: %s", exts[i]);
+	}
+	free(extension_properties);
 
 #ifndef NDEBUG
 	if (!VK_CheckValidationLayerSupport()) {
@@ -166,32 +184,31 @@ static void VK_CreateInstance() {
 #endif
 
 	// create instance
-	{
-		VkApplicationInfo vk_app_info = {
-			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-			.pApplicationName = "Quake 3",
-			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-			.pEngineName = "q3pt",
-			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
-			.apiVersion = VK_API_VERSION_1_2,
-		};
+	VkApplicationInfo vk_app_info = {
+		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		.pApplicationName = "Quake 3",
+		.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+		.pEngineName = "q3pt",
+		.engineVersion = VK_MAKE_VERSION(1, 0, 0),
+		.apiVersion = VK_API_VERSION_1_2,
+	};
 
-		VkInstanceCreateInfo desc = { 0 };
-		desc.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		desc.pNext = NULL;
-		desc.flags = 0;
-		desc.pApplicationInfo = &vk_app_info;
-		desc.enabledLayerCount = 0;
-		desc.ppEnabledLayerNames = NULL;
-		desc.enabledExtensionCount = sizeof(instanceExtensions) / sizeof(instanceExtensions[0]);
-		desc.ppEnabledExtensionNames = instanceExtensions;
+	VkInstanceCreateInfo desc = { 0 };
+	desc.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	desc.pNext = NULL;
+	desc.flags = 0;
+	desc.pApplicationInfo = &vk_app_info;
+	desc.enabledLayerCount = 0;
+	desc.ppEnabledLayerNames = NULL;
+	desc.enabledExtensionCount = extCount;
+	desc.ppEnabledExtensionNames = exts;
 #ifndef NDEBUG
-		desc.enabledLayerCount = (uint32_t)(sizeof(validationLayers) / sizeof(validationLayers[0]));
-		desc.ppEnabledLayerNames = &validationLayers[0];
+	desc.enabledLayerCount = (uint32_t)(sizeof(validationLayers) / sizeof(validationLayers[0]));
+	desc.ppEnabledLayerNames = &validationLayers[0];
 #endif
-		VK_CHECK(vkCreateInstance(&desc, NULL, &vk.instance), "failed to create Instance!");
-	}
+	VK_CHECK(vkCreateInstance(&desc, NULL, &vk.instance), "failed to create Instance!");
 }
+
 
 /*
 ** VK_CreateSurface
@@ -217,13 +234,23 @@ static void VK_CreateSurface(void* p1, void* p2) {
     desc.pView = p1;
     VK_CHECK(vkCreateMacOSSurfaceMVK(vk.instance, &desc, NULL, &vk.surface), "failed to create MacOS Surface!");
 #elif defined( __linux__ )
-	VkXlibSurfaceCreateInfoKHR desc = {0};
-	desc.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-	desc.pNext = NULL;
-	desc.flags = 0;
-	desc.dpy = (Display*)p1;
-	desc.window = (Window)(uintptr_t)p2;
-	VK_CHECK(vkCreateXlibSurfaceKHR(vk.instance, &desc, NULL, &vk.surface), "failed to create Xlib Surface!");
+	if ( VK_UsingWayland ) {
+		VkWaylandSurfaceCreateInfoKHR desc = {0};
+		desc.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+		desc.pNext = NULL;
+		desc.flags = 0;
+		desc.display = (struct wl_display*)VK_WaylandDisplay;
+		desc.surface = (struct wl_surface*)VK_WaylandSurface;
+		VK_CHECK(vkCreateWaylandSurfaceKHR(vk.instance, &desc, NULL, &vk.surface), "failed to create Wayland Surface!");
+	} else {
+		VkXlibSurfaceCreateInfoKHR desc = {0};
+		desc.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+		desc.pNext = NULL;
+		desc.flags = 0;
+		desc.dpy = (Display*)p1;
+		desc.window = (Window)(uintptr_t)p2;
+		VK_CHECK(vkCreateXlibSurfaceKHR(vk.instance, &desc, NULL, &vk.surface), "failed to create Xlib Surface!");
+	}
 #endif
 }
 

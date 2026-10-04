@@ -16,6 +16,14 @@
 #include "unix_glw.h"
 #include "linux_local.h"
 
+int VKW_CreateWaylandWindow( int width, int height );
+void *VKimpGetWaylandDisplay( void );
+void *VKimpGetWaylandSurface( void );
+void VKimpWaylandPump( void );
+extern qboolean VK_UsingWayland;
+extern void *VK_WaylandDisplay;
+extern void *VK_WaylandSurface;
+
 qboolean QVK_Init( const char *dllname );
 void QVK_Shutdown( void );
 void VK_Setup( void *p1, void *p2 );
@@ -28,6 +36,15 @@ glwstate_t glw_state;
 
 static qboolean VKW_CreateWindow( int width, int height )
 {
+	/* probe Wayland first; fall back to X11 when a Wayland window cannot be created */
+	if ( VKW_CreateWaylandWindow( width, height ) ) {
+		VK_UsingWayland = qtrue;
+		VK_WaylandDisplay = VKimpGetWaylandDisplay();
+		VK_WaylandSurface = VKimpGetWaylandSurface();
+		ri.Printf( PRINT_ALL, "...created Wayland window (%dx%d)\n", width, height );
+		return qtrue;
+	}
+
 	int scrnum;
 	Window root;
 	XSetWindowAttributes attr;
@@ -159,6 +176,12 @@ void VKimp_Shutdown( void )
 		}
 		XCloseDisplay( vk_dpy );
 		vk_dpy = NULL;
+	}
+
+	if ( VK_UsingWayland ) {
+		VK_UsingWayland = qfalse;
+		VK_WaylandDisplay = NULL;
+		VK_WaylandSurface = NULL;
 	}
 
 	QVK_Shutdown();
@@ -764,6 +787,10 @@ void IN_Activate(void)
 void Sys_SendKeyEvents (void) {
   // XEvent event; // bk001204 - unused
 
+  if ( VK_UsingWayland ) {
+    VKimpWaylandPump();
+    return;
+  }
   if (!vk_dpy)
     return;
   HandleEvents();
