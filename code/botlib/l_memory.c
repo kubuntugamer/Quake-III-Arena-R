@@ -343,13 +343,20 @@ void *GetMemory(unsigned long size)
 #endif //MEMDEBUG
 {
 	void *ptr;
-	unsigned long int *memid;
 
-	ptr = botimport.GetMemory(size + sizeof(unsigned long int));
+	/* Z_TagMalloc only guarantees pointer alignment, so over-allocate and
+	   align the handed out block up to 16 bytes here. Consumers such as
+	   script_t embed a long double (via token_t) and need that alignment.
+	   Layout: [ base pointer ][ MEM_ID ][ user data (16 byte aligned ) ] */
+	ptr = botimport.GetMemory(size + sizeof(unsigned long int) * 2 + 16);
 	if (!ptr) return NULL;
-	memid = (unsigned long int *) ptr;
-	*memid = MEM_ID;
-	return (unsigned long int *) ((char *) ptr + sizeof(unsigned long int));
+	{
+		void *aligned = (void *) (((unsigned long int) ptr + sizeof(unsigned long int) * 2 + 15)
+			& ~(unsigned long int) 15);
+		((void **) ((char *) aligned - sizeof(unsigned long int) * 2))[0] = ptr;
+		((unsigned long int *) ((char *) aligned - sizeof(unsigned long int)))[0] = MEM_ID;
+		return (unsigned long int *) aligned;
+	}
 } //end of the function GetMemory
 //===========================================================================
 //
@@ -423,13 +430,15 @@ void *GetClearedHunkMemory(unsigned long size)
 void FreeMemory(void *ptr)
 {
 	unsigned long int *memid;
+	void *base;
 
+	/* GetMemory puts MEM_ID in the 8 bytes before the pointer; anything
+	   else (hunk blocks, foreign pointers) is not ours to free */
 	memid = (unsigned long int *) ((char *) ptr - sizeof(unsigned long int));
+	if (*memid != MEM_ID) return;
 
-	if (*memid == MEM_ID)
-	{
-		botimport.FreeMemory(memid);
-	} //end if
+	base = ((void **) ((char *) ptr - sizeof(unsigned long int) * 2))[0];
+	botimport.FreeMemory(base);
 } //end of the function FreeMemory
 //===========================================================================
 //
