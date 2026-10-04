@@ -41,6 +41,10 @@ void QVK_Shutdown( void );
 void VKimp_Init( void );
 void VKimp_Shutdown( void );
 
+/* Feral GameMode (linux_gamemode.c); no-ops without daemon/lib */
+void Sys_GameModeStart( void );
+void Sys_GameModeEnd( void );
+
 // bk001130 - win32
 // void IN_JoystickCommands (void);
 

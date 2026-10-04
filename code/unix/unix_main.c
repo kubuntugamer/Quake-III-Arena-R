@@ -319,6 +319,7 @@ void Sys_Printf (char *fmt, ...)
 
 // single exit point (regular exit or in case of signal fault)
 void Sys_Exit( int ex ) {
+  Sys_GameModeEnd();
   Sys_ConsoleInputShutdown();
 
 #ifdef NDEBUG // regular behavior
@@ -1262,6 +1263,8 @@ int main ( int argc, char* argv[] )
 
   Com_Init(cmdline);
   NET_Init();
+
+  Sys_GameModeStart();
 
   Sys_ConsoleInputInit();
 
