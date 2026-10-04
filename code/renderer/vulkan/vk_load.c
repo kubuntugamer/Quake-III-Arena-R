@@ -31,6 +31,7 @@ PFN_vkCreateMacOSSurfaceMVK                     vkCreateMacOSSurfaceMVK;
 PFN_vkCreateXlibSurfaceKHR				vkCreateXlibSurfaceKHR;
 #endif
 PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR;
+PFN_vkGetPhysicalDeviceFeatures					vkGetPhysicalDeviceFeatures;
 PFN_vkGetPhysicalDeviceProperties				vkGetPhysicalDeviceProperties;
 PFN_vkGetPhysicalDeviceProperties2				vkGetPhysicalDeviceProperties2;
 PFN_vkGetPhysicalDeviceSurfaceSupportKHR		vkGetPhysicalDeviceSurfaceSupportKHR;
@@ -176,6 +177,7 @@ qboolean VK_LoadInstanceFunctions(void)
     VK_INSTANCE_LEVEL_FUNCTION(vkDestroySurfaceKHR, "vkDestroySurfaceKHR");
 	
 	/* Physical Device */
+	VK_INSTANCE_LEVEL_FUNCTION(vkGetPhysicalDeviceFeatures, "vkGetPhysicalDeviceFeatures");
 	VK_INSTANCE_LEVEL_FUNCTION(vkGetPhysicalDeviceProperties, "vkGetPhysicalDeviceProperties");
 	VK_INSTANCE_LEVEL_FUNCTION(vkGetPhysicalDeviceProperties2, "vkGetPhysicalDeviceProperties2");
 	VK_INSTANCE_LEVEL_FUNCTION(vkGetPhysicalDeviceSurfaceSupportKHR, "vkGetPhysicalDeviceSurfaceSupportKHR");

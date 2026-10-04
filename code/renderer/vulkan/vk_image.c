@@ -135,8 +135,18 @@ void VK_CreateSampler(	vkimage_t* image, VkFilter magFilter, VkFilter minFilter,
 	desc.addressModeV = addressMode;
 	desc.addressModeW = addressMode;
 	desc.mipLodBias = 0.0f;
-	desc.anisotropyEnable = VK_FALSE;
-	desc.maxAnisotropy = 1;
+	// SDK feature sweep: anisotropy when the device supports it (r_anisotropy, latched)
+	{
+		float maxAniso = 1.0f;
+		if (vk.anisotropy && r_anisotropy != NULL && r_anisotropy->value > 1.0f) {
+			maxAniso = r_anisotropy->value;
+			if (maxAniso > vk.deviceProperties.limits.maxSamplerAnisotropy) {
+				maxAniso = vk.deviceProperties.limits.maxSamplerAnisotropy;
+			}
+		}
+		desc.anisotropyEnable = (maxAniso > 1.0f) ? VK_TRUE : VK_FALSE;
+		desc.maxAnisotropy = maxAniso;
+	}
 	desc.compareEnable = VK_FALSE;
 	desc.compareOp = VK_COMPARE_OP_ALWAYS;
 	desc.minLod = 0.0f;

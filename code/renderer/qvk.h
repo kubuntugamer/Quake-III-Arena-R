@@ -76,6 +76,7 @@ extern PFN_vkCreateXlibSurfaceKHR				vkCreateXlibSurfaceKHR;
 extern PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR;
 
 /* Physical Device */
+extern PFN_vkGetPhysicalDeviceFeatures					vkGetPhysicalDeviceFeatures;
 extern PFN_vkGetPhysicalDeviceProperties				vkGetPhysicalDeviceProperties;
 extern PFN_vkGetPhysicalDeviceProperties2				vkGetPhysicalDeviceProperties2;
 extern PFN_vkGetPhysicalDeviceSurfaceSupportKHR		vkGetPhysicalDeviceSurfaceSupportKHR;

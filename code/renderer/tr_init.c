@@ -114,6 +114,7 @@ cvar_t	*r_clear;
 cvar_t	*r_swapInterval;
 cvar_t	*r_presentMode;
 cvar_t	*r_textureMode;
+cvar_t	*r_anisotropy;
 cvar_t	*r_offsetFactor;
 cvar_t	*r_offsetUnits;
 cvar_t	*r_gamma;
@@ -1046,6 +1047,25 @@ void GfxInfo_f( void )
 		ri.Printf( PRINT_ALL, "GAMMA: software w/ %d overbright bits\n", tr.overbrightBits );
 	}
 	ri.Printf( PRINT_ALL, "CPU: %s\n", sys_cpustring->string );
+	{
+		// SDK feature sweep: report device-local VRAM (no extension needed)
+		VkPhysicalDeviceMemoryProperties memProps = { 0 };
+		VkDeviceSize vram = 0;
+		vkGetPhysicalDeviceMemoryProperties(vk.physicalDevice, &memProps);
+		for (uint32_t i = 0; i < memProps.memoryHeapCount; i++) {
+			if (memProps.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+				vram += memProps.memoryHeaps[i].size;
+			}
+		}
+		ri.Printf(PRINT_ALL, "VRAM: %.0f MB device-local | anisotropy: %s | RT maintenance1: %s | RT positionFetch: %s | present mode: %s\n",
+			(double)vram / (1024.0 * 1024.0),
+			vk.anisotropy ? "yes" : "no",
+			vk.rtMaintenance1 ? "yes" : "no",
+			vk.rtPositionFetch ? "yes" : "no",
+			(r_presentMode != NULL && r_presentMode->integer == 0) ? "FIFO" :
+			(r_presentMode != NULL && r_presentMode->integer == 2) ? "IMMEDIATE" :
+			(r_presentMode != NULL && r_presentMode->integer == 3) ? "LATEST_READY" : "MAILBOX");
+	}
 
 	// rendering primitives
 	{
@@ -1166,6 +1186,7 @@ void R_Register( void )
 	r_dlightBacks = ri.Cvar_Get( "r_dlightBacks", "1", CVAR_ARCHIVE );
 	r_finish = ri.Cvar_Get ("r_finish", "0", CVAR_ARCHIVE);
 	r_textureMode = ri.Cvar_Get( "r_textureMode", "GL_LINEAR_MIPMAP_NEAREST", CVAR_ARCHIVE );
+	r_anisotropy = ri.Cvar_Get( "r_anisotropy", "8", CVAR_ARCHIVE | CVAR_LATCH );
 	r_swapInterval = ri.Cvar_Get( "r_swapInterval", "0", CVAR_ARCHIVE );
 
 	r_gamma = ri.Cvar_Get( "r_gamma", "1", CVAR_ARCHIVE );

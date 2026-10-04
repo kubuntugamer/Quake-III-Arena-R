@@ -4,18 +4,27 @@
 vkinstance_t vk;
 vkdata_t     vk_d;
 
-static const char* deviceExtensions[] = {
+static const char* requiredDeviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
 #endif
-#ifndef NDEBUG
-		//VK_EXT_DEBUG_MARKER_EXTENSION_NAME,
-#endif
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
+
+// Enabled when the driver offers them (queried per physical device, never fatal)
+static const char* optionalDeviceExtensions[] = {
+#if defined( _WIN32 ) || defined( __linux__ )
+		VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME,
+		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
+#endif
+};
+
+#define VK_MAX_ENABLED_DEVICE_EXTENSIONS 16
+static const char* enabledDeviceExtensions[VK_MAX_ENABLED_DEVICE_EXTENSIONS];
+static uint32_t enabledDeviceExtensionCount = 0;
 
 static const char* validationLayers[] = {
 		"VK_LAYER_KHRONOS_validation"
@@ -58,6 +67,7 @@ static void VK_SetupQueryPool();
 // Helper
 static qboolean VK_IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
 static qboolean VK_CheckValidationLayerSupport();
+static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device);
 
 void VK_Setup(void* p1, void* p2) {
     if (!VK_LoadGlobalFunctions()) return;
@@ -229,6 +239,9 @@ static void VK_PickPhysicalDevice()
 	// device properties
 	vkGetPhysicalDeviceProperties(vk.physicalDevice, &vk.deviceProperties);
 
+	// final enabled extension set (required + available optional)
+	VK_FillEnabledDeviceExtensions(vk.physicalDevice);
+
 	// rtx properties (KHR)
 	vk.accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
 	vk.accelProperties.pNext = NULL;
@@ -266,12 +279,16 @@ static void VK_CreateLogicalDevice()
 		queueCreateInfos[1].pQueuePriorities = &queuePriority;
 	}
 
-	// activate features
+	// activate features (1.0 bits gated on actual device support)
+	VkPhysicalDeviceFeatures supportedFeatures = { 0 };
+	vkGetPhysicalDeviceFeatures(vk.physicalDevice, &supportedFeatures);
+	vk.anisotropy = supportedFeatures.samplerAnisotropy;
 	VkPhysicalDeviceFeatures deviceFeatures = { 0 };
 	deviceFeatures.fillModeNonSolid = qtrue;
 	deviceFeatures.multiDrawIndirect = qfalse;
 	deviceFeatures.drawIndirectFirstInstance = qfalse;
 	deviceFeatures.shaderClipDistance = qtrue;
+	deviceFeatures.samplerAnisotropy = vk.anisotropy;
 
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures = { 0 };
 	indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
@@ -306,8 +323,8 @@ static void VK_CreateLogicalDevice()
 
 	desc.pEnabledFeatures = &deviceFeatures;
 
-	desc.enabledExtensionCount = (uint32_t)(sizeof(deviceExtensions) / sizeof(deviceExtensions[0]));
-	desc.ppEnabledExtensionNames = &deviceExtensions[0];
+	desc.enabledExtensionCount = enabledDeviceExtensionCount;
+	desc.ppEnabledExtensionNames = &enabledDeviceExtensions[0];
 
 	VK_CHECK(vkCreateDevice(vk.physicalDevice, &desc, NULL, &vk.device), "failed to create logical device!")
 }
@@ -451,28 +468,55 @@ static vkqueueFamilyIndices_t VK_FindQueueFamilies(VkPhysicalDevice device, VkSu
 	return indices;
 }
 
-static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device) {
-	uint32_t extensionCount;
+static qboolean VK_HasDeviceExtension(VkPhysicalDevice device, const char* name) {
+	uint32_t extensionCount = 0;
 	vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
 	VkExtensionProperties* availableExtensions = malloc(extensionCount * sizeof(VkExtensionProperties));
 	vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, &availableExtensions[0]);
-
-	for (int i = 0; i < (sizeof(deviceExtensions) / sizeof(deviceExtensions[0])); i++) {
-		qboolean supported = qfalse;
-		for (int j = 0; j < extensionCount; j++) {
-			if (!strcmp(availableExtensions[j].extensionName, deviceExtensions[i])) {
-				supported = qtrue;
-				break;
-			}
+	qboolean supported = qfalse;
+	for (uint32_t j = 0; j < extensionCount; j++) {
+		if (!strcmp(availableExtensions[j].extensionName, name)) {
+			supported = qtrue;
+			break;
 		}
-		if (!supported) {
-			free(availableExtensions);
+	}
+	free(availableExtensions);
+	return supported;
+}
+
+static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device) {
+	for (int i = 0; i < (int)(sizeof(requiredDeviceExtensions) / sizeof(requiredDeviceExtensions[0])); i++) {
+		if (!VK_HasDeviceExtension(device, requiredDeviceExtensions[i])) {
 			return qfalse;
 		}
 	}
-
-	free(availableExtensions);
 	return qtrue;
+}
+
+// Fill the final enabled extension list for the picked device: everything
+// required plus whichever optional extensions the driver offers.
+static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
+	enabledDeviceExtensionCount = 0;
+	for (int i = 0; i < (int)(sizeof(requiredDeviceExtensions) / sizeof(requiredDeviceExtensions[0])); i++) {
+		enabledDeviceExtensions[enabledDeviceExtensionCount++] = requiredDeviceExtensions[i];
+	}
+	vk.rtMaintenance1 = qfalse;
+	vk.rtPositionFetch = qfalse;
+	for (int i = 0; i < (int)(sizeof(optionalDeviceExtensions) / sizeof(optionalDeviceExtensions[0])); i++) {
+		if (enabledDeviceExtensionCount >= VK_MAX_ENABLED_DEVICE_EXTENSIONS) {
+			break;
+		}
+		if (VK_HasDeviceExtension(device, optionalDeviceExtensions[i])) {
+			enabledDeviceExtensions[enabledDeviceExtensionCount++] = optionalDeviceExtensions[i];
+			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME)) {
+				vk.rtMaintenance1 = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)) {
+				vk.rtPositionFetch = qtrue;
+			}
+			ri.Printf(PRINT_ALL, "...enabling optional device extension %s\n", optionalDeviceExtensions[i]);
+		}
+	}
 }
 
 qboolean VK_IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {

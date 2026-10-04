@@ -1163,6 +1163,9 @@ typedef struct {
 	VkPhysicalDeviceProperties2 deviceProperties2;
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingProperties;
+	qboolean					anisotropy; // samplerAnisotropy was available and enabled
+	qboolean					rtMaintenance1; // VK_KHR_ray_tracing_maintenance1 enabled
+	qboolean					rtPositionFetch; // VK_KHR_ray_tracing_position_fetch enabled
 
 	vkqueueFamilyIndices_t		queryFamilyIndices;
 
@@ -1729,6 +1732,7 @@ extern	cvar_t	*r_finish;
 extern	cvar_t	*r_drawBuffer;
 extern	cvar_t	*r_swapInterval;
 extern	cvar_t	*r_textureMode;
+extern	cvar_t	*r_anisotropy;
 extern	cvar_t	*r_offsetFactor;
 extern	cvar_t	*r_offsetUnits;
 
