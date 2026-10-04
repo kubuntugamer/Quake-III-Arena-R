@@ -148,6 +148,7 @@ PFN_vkCreateRayTracingPipelinesKHR				vkCreateRayTracingPipelinesKHR;
 PFN_vkGetRayTracingShaderGroupHandlesKHR			vkGetRayTracingShaderGroupHandlesKHR;
 PFN_vkCmdTraceRaysKHR								vkCmdTraceRaysKHR;
 PFN_vkGetBufferDeviceAddress						vkGetBufferDeviceAddress;
+PFN_vkWaitForPresentKHR							vkWaitForPresentKHR;
 
 qboolean VK_LoadGlobalFunctions(void)
 {
@@ -323,6 +324,7 @@ qboolean VK_LoadDeviceFunctions(void)
 	VK_DEVICE_LEVEL_FUNCTION(vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
 	VK_DEVICE_LEVEL_FUNCTION(vkGetBufferDeviceAddress, "vkGetBufferDeviceAddress");
+	VK_DEVICE_LEVEL_FUNCTION(vkWaitForPresentKHR, "vkWaitForPresentKHR");
 
     return qtrue;
 }

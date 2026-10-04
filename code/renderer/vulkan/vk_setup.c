@@ -19,6 +19,9 @@ static const char* optionalDeviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
 		VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
+		VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+		VK_KHR_PRESENT_ID_EXTENSION_NAME,
+		VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
 #endif
 };
 
@@ -311,9 +314,19 @@ static void VK_CreateLogicalDevice()
 	rayTracingPipelineFeatures.rayTracingPipeline = qtrue;
 	rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
 
+	VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures = { 0 };
+	presentIdFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+	presentIdFeatures.presentId = vk.presentId;
+	presentIdFeatures.pNext = &rayTracingPipelineFeatures;
+
+	VkPhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures = { 0 };
+	presentWaitFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+	presentWaitFeatures.presentWait = vk.presentWait;
+	presentWaitFeatures.pNext = &presentIdFeatures;
+
 	VkPhysicalDeviceFeatures2 device_features = { 0 };
 	device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
-	device_features.pNext = &rayTracingPipelineFeatures;
+	device_features.pNext = &presentWaitFeatures;
 
 	VkDeviceCreateInfo desc = { 0 };
 	desc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -502,6 +515,9 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
 	}
 	vk.rtMaintenance1 = qfalse;
 	vk.rtPositionFetch = qfalse;
+	vk.swapchainMaintenance1 = qfalse;
+	vk.presentId = qfalse;
+	vk.presentWait = qfalse;
 	for (int i = 0; i < (int)(sizeof(optionalDeviceExtensions) / sizeof(optionalDeviceExtensions[0])); i++) {
 		if (enabledDeviceExtensionCount >= VK_MAX_ENABLED_DEVICE_EXTENSIONS) {
 			break;
@@ -513,6 +529,15 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
 			}
 			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)) {
 				vk.rtPositionFetch = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)) {
+				vk.swapchainMaintenance1 = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_PRESENT_ID_EXTENSION_NAME)) {
+				vk.presentId = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
+				vk.presentWait = qtrue;
 			}
 			ri.Printf(PRINT_ALL, "...enabling optional device extension %s\n", optionalDeviceExtensions[i]);
 		}

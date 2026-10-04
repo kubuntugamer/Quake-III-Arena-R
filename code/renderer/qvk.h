@@ -221,5 +221,6 @@ extern PFN_vkCreateRayTracingPipelinesKHR				vkCreateRayTracingPipelinesKHR;
 extern PFN_vkGetRayTracingShaderGroupHandlesKHR			vkGetRayTracingShaderGroupHandlesKHR;
 extern PFN_vkCmdTraceRaysKHR								vkCmdTraceRaysKHR;
 extern PFN_vkGetBufferDeviceAddress						vkGetBufferDeviceAddress;
+extern PFN_vkWaitForPresentKHR							vkWaitForPresentKHR;
 
 #endif

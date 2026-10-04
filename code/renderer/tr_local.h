@@ -1132,6 +1132,9 @@ typedef struct {
 	uint32_t					imageCount;
 	VkFormat					imageFormat;
 	VkPresentModeKHR			presentMode;
+	VkPresentModeKHR			supportedModes[8];
+	uint32_t					supportedModeCount;
+	uint64_t					presentId;
 	VkImage						*images;
 	VkImageView					*imageViews;
 	VkFramebuffer				*framebuffers;
@@ -1166,6 +1169,9 @@ typedef struct {
 	qboolean					anisotropy; // samplerAnisotropy was available and enabled
 	qboolean					rtMaintenance1; // VK_KHR_ray_tracing_maintenance1 enabled
 	qboolean					rtPositionFetch; // VK_KHR_ray_tracing_position_fetch enabled
+	qboolean					swapchainMaintenance1; // VK_KHR_swapchain_maintenance1 enabled
+	qboolean					presentId; // VK_KHR_present_id enabled
+	qboolean					presentWait; // VK_KHR_present_wait enabled
 
 	vkqueueFamilyIndices_t		queryFamilyIndices;
 

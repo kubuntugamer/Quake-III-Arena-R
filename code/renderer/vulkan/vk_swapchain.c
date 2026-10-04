@@ -110,6 +110,16 @@ static void VK_CreateSwapChain() {
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(&swapChainSupport.formats[0], swapChainSupport.formatCount);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(&swapChainSupport.presentModes[0], swapChainSupport.presentModeCount);
+
+	// cache the surface mode list for per-present resolution (live switching)
+	vk.swapchain.supportedModeCount = swapChainSupport.presentModeCount;
+	if (vk.swapchain.supportedModeCount > 8) {
+		vk.swapchain.supportedModeCount = 8;
+	}
+	for (uint32_t i = 0; i < vk.swapchain.supportedModeCount; i++) {
+		vk.swapchain.supportedModes[i] = swapChainSupport.presentModes[i];
+	}
+	vk.swapchain.presentId = 0;
 	
 	// set extent
 	vk.swapchain.extent = swapChainSupport.capabilities.currentExtent;
@@ -147,6 +157,34 @@ static void VK_CreateSwapChain() {
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createInfo.presentMode = presentMode;
 	vk.swapchain.presentMode = presentMode;
+	// maintenance1: pre-authorize every mode we might switch to live
+	VkPresentModeKHR allowedModes[8];
+	uint32_t allowedModeCount = 0;
+	{
+		VkPresentModeKHR candidates[] = {
+			VK_PRESENT_MODE_FIFO_KHR,
+			VK_PRESENT_MODE_MAILBOX_KHR,
+			VK_PRESENT_MODE_IMMEDIATE_KHR,
+#ifdef VK_PRESENT_MODE_FIFO_LATEST_READY_KHR
+			VK_PRESENT_MODE_FIFO_LATEST_READY_KHR,
+#endif
+		};
+		for (int i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+			for (uint32_t j = 0; j < swapChainSupport.presentModeCount; j++) {
+				if (swapChainSupport.presentModes[j] == candidates[i]) {
+					allowedModes[allowedModeCount++] = candidates[i];
+					break;
+				}
+			}
+		}
+	}
+	VkSwapchainPresentModesCreateInfoKHR presentModesInfo = { 0 };
+	if (vk.swapchainMaintenance1 && allowedModeCount > 0) {
+		presentModesInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR;
+		presentModesInfo.presentModeCount = allowedModeCount;
+		presentModesInfo.pPresentModes = &allowedModes[0];
+		createInfo.pNext = &presentModesInfo;
+	}
 	createInfo.clipped = VK_TRUE;
 	createInfo.oldSwapchain = VK_NULL_HANDLE;
 
@@ -367,11 +405,15 @@ void VK_BeginFrame()
 	// live present-mode switch (r_presentMode is intentionally not latched)
 	if (r_presentMode != NULL && r_presentMode->modified) {
 		r_presentMode->modified = qfalse;
-		ri.Printf(PRINT_ALL, "...recreating swapchain for r_presentMode %d\n", r_presentMode->integer);
-		if (!VK_RecreateSwapchain()) {
-			ri.Printf(PRINT_WARNING, "Vulkan: surface extent changed, run vid_restart\n");
-			ri.Cmd_ExecuteText(EXEC_APPEND, "vid_restart\n");
-			return;
+		if (vk.swapchainMaintenance1) {
+			ri.Printf(PRINT_ALL, "...present mode takes effect on next present (no swapchain rebuild)\n");
+		} else {
+			ri.Printf(PRINT_ALL, "...recreating swapchain for r_presentMode %d\n", r_presentMode->integer);
+			if (!VK_RecreateSwapchain()) {
+				ri.Printf(PRINT_WARNING, "Vulkan: surface extent changed, run vid_restart\n");
+				ri.Cmd_ExecuteText(EXEC_APPEND, "vid_restart\n");
+				return;
+			}
 		}
 	}
 
@@ -461,6 +503,31 @@ void VK_EndFrame()
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &vk.swapchain.currentImage;
 
+	// maintenance1: switch present mode live (must be in the create-time list)
+	VkSwapchainPresentModeInfoKHR presentModeInfo = { 0 };
+	VkPresentModeKHR desiredMode = vk.swapchain.presentMode;
+	if (vk.swapchainMaintenance1 && vk.swapchain.supportedModeCount > 0) {
+		desiredMode = chooseSwapPresentMode(&vk.swapchain.supportedModes[0], vk.swapchain.supportedModeCount);
+		presentModeInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_KHR;
+		presentModeInfo.swapchainCount = 1;
+		presentModeInfo.pPresentModes = &desiredMode;
+		presentInfo.pNext = &presentModeInfo;
+		vk.swapchain.presentMode = desiredMode;
+	}
+	// present_id: tag every present for pacing/debug
+	VkPresentIdKHR presentIdInfo = { 0 };
+	if (vk.presentId) {
+		vk.swapchain.presentId++;
+		presentIdInfo.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR;
+		presentIdInfo.swapchainCount = 1;
+		presentIdInfo.pPresentIds = &vk.swapchain.presentId;
+		if (presentInfo.pNext == &presentModeInfo) {
+			presentModeInfo.pNext = &presentIdInfo;
+		} else {
+			presentInfo.pNext = &presentIdInfo;
+		}
+	}
+
 	VkResult res = vkQueuePresentKHR(vk.presentQueue, &presentInfo);
 	if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
 		// window resized or surface changed: rebuild swapchain; a full
@@ -471,6 +538,18 @@ void VK_EndFrame()
 		}
 	} else {
 		VK_CHECK(res, "failed to Queue Present!");
+		// present_wait pacing: in non-FIFO modes cap queue-ahead by waiting
+		// for the previous present (bounded: never hangs the frame loop)
+		if (res == VK_SUCCESS && vk.presentWait && vk.presentId && vkWaitForPresentKHR != NULL &&
+			vk.swapchain.presentMode != VK_PRESENT_MODE_FIFO_KHR && vk.swapchain.presentId > 1) {
+			VkResult wres = vkWaitForPresentKHR(vk.device, vk.swapchain.handle, vk.swapchain.presentId - 1, 50000000);
+			if (wres == VK_TIMEOUT) {
+				ri.Printf(PRINT_DEVELOPER, "Vulkan: present wait timed out, proceeding\n");
+			} else if (wres != VK_SUCCESS) {
+				vk.presentWait = qfalse; // driver disagrees: stop pacing, keep presenting
+				ri.Printf(PRINT_WARNING, "Vulkan: present wait failed (%s), pacing disabled\n", VK_ErrorString(wres));
+			}
+		}
 	}
 
 	vk.swapchain.lastFrame = vk.swapchain.currentFrame;
