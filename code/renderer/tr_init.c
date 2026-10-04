@@ -94,7 +94,6 @@ cvar_t	*r_primitives;
 cvar_t	*r_texturebits;
 
 cvar_t	*r_drawBuffer;
-cvar_t  *r_glDriver;
 cvar_t	*r_lightmap;
 cvar_t	*r_vertexLight;
 cvar_t	*r_rtx;
@@ -177,9 +176,6 @@ cvar_t* rt_denoiser;
 cvar_t* rt_brightness;
 cvar_t* rt_tonemapping_reinhard;
 
-/* qgl multitexture/compiled-array pointers are declared extern in qgl.h
-   and defined in the platform qgl layer (unix/linux_qgl.c) */
-
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral )
 {
 	if ( shouldBeIntegral )
@@ -201,65 +197,6 @@ static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean sh
 		ri.Printf( PRINT_WARNING, "WARNING: cvar '%s' out of range (%f > %f)\n", cv->name, cv->value, maxVal );
 		ri.Cvar_Set( cv->name, va( "%f", maxVal ) );
 	}
-}
-
-
-/*
-** InitOpenGL
-**
-** This function is responsible for initializing a valid OpenGL subsystem.  This
-** is done by calling GLimp_Init (which gives us a working OGL subsystem) then
-** setting variables, checking GL constants, and reporting the gfx system config
-** to the user.
-*/
-static void InitOpenGL( void )
-{
-	char renderer_buffer[1024];
-
-	//
-	// initialize OS specific portions of the renderer
-	//
-	// GLimp_Init directly or indirectly references the following cvars:
-	//		- r_fullscreen
-	//		- r_glDriver
-	//		- r_mode
-	//		- r_(color|depth|stencil)bits
-	//		- r_ignorehwgamma
-	//		- r_gamma
-	//
-	
-	glConfig.driverType = OPENGL;
-
-	if ( glConfig.vidWidth == 0 )
-	{
-
-		GLint		temp;
-		
-		R_SetOpenGLApi(&tr_api);
-		GLimp_Init();
-
-		strcpy( renderer_buffer, glConfig.renderer_string );
-		Q_strlwr( renderer_buffer );
-
-		// OpenGL driver constants
-		qglGetIntegerv( GL_MAX_TEXTURE_SIZE, &temp );
-		glConfig.maxTextureSize = temp;
-
-		// stubbed or broken drivers may have reported 0...
-		if ( glConfig.maxTextureSize <= 0 ) 
-		{
-			glConfig.maxTextureSize = 0;
-		}
-	}
-
-	// init command buffers and SMP
-	R_InitCommandBuffers();
-
-	// print info
-	GfxInfo_f();
-
-	// set default state
-	GL_SetDefaultState();
 }
 
 static void InitVulkan(void)
@@ -584,50 +521,6 @@ static void InitVulkan(void)
 }
 
 /*
-==================
-GL_CheckErrors
-==================
-*/
-void GL_CheckErrors( void ) {
-    int		err;
-    char	s[64];
-
-    err = qglGetError();
-    if ( err == GL_NO_ERROR ) {
-        return;
-    }
-    if ( r_ignoreGLErrors->integer ) {
-        return;
-    }
-    switch( err ) {
-        case GL_INVALID_ENUM:
-            strcpy( s, "GL_INVALID_ENUM" );
-            break;
-        case GL_INVALID_VALUE:
-            strcpy( s, "GL_INVALID_VALUE" );
-            break;
-        case GL_INVALID_OPERATION:
-            strcpy( s, "GL_INVALID_OPERATION" );
-            break;
-        case GL_STACK_OVERFLOW:
-            strcpy( s, "GL_STACK_OVERFLOW" );
-            break;
-        case GL_STACK_UNDERFLOW:
-            strcpy( s, "GL_STACK_UNDERFLOW" );
-            break;
-        case GL_OUT_OF_MEMORY:
-            strcpy( s, "GL_OUT_OF_MEMORY" );
-            break;
-        default:
-            Com_sprintf( s, sizeof(s), "%i", err);
-            break;
-    }
-
-    ri.Error( ERR_FATAL, "GL_CheckErrors: %s", s );
-}
-
-
-/*
 ** R_GetModeInfo
 */
 typedef struct vidmode_s
@@ -699,7 +592,6 @@ static void R_ModeList_f( void )
 	ri.Printf( PRINT_ALL, "\n" );
 }
 
-
 /* 
 ============================================================================== 
  
@@ -738,9 +630,7 @@ void RB_TakeScreenshot( int x, int y, int width, int height, char *fileName ) {
 	buffer[15] = height >> 8;
 	buffer[16] = 24;	// pixel size
 
-	if(glConfig.driverType == OPENGL) qglReadPixels( x, y, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer+18 ); 
-	else if (glConfig.driverType == VULKAN)	VK_ReadPixelsScreen(qfalse, buffer + 18);
-
+	VK_ReadPixelsScreen(qfalse, buffer + 18);
 
 	// swap rgb to bgr
 	c = 18 + width * height * 3;
@@ -770,13 +660,7 @@ void RB_TakeScreenshotJPEG( int x, int y, int width, int height, char *fileName 
 
 	buffer = ri.Hunk_AllocateTempMemory(glConfig.vidWidth*glConfig.vidHeight*4);
 
-	if (glConfig.driverType == OPENGL) qglReadPixels(x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
-	else if (glConfig.driverType == VULKAN)	VK_ReadPixelsScreen(qtrue, buffer);
-
-	// gamma correct
-	if ( ( tr.overbrightBits > 0 ) && glConfig.deviceSupportsGamma ) {
-		R_GammaCorrect( buffer, glConfig.vidWidth * glConfig.vidHeight * 4 );
-	}
+	VK_ReadPixelsScreen(qtrue, buffer);
 
 	ri.FS_WriteFile( fileName, buffer, 1 );		// create path
 	SaveJPG( fileName, 95, glConfig.vidWidth, glConfig.vidHeight, buffer);
@@ -905,7 +789,7 @@ void R_LevelShot( void ) {
 	buffer[14] = 128;
 	buffer[16] = 24;	// pixel size
 
-	qglReadPixels( 0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_RGB, GL_UNSIGNED_BYTE, source ); 
+	VK_ReadPixelsScreen(qfalse, source);
 
 	// resample from source
 	xScale = glConfig.vidWidth / 512.0f;
@@ -1061,51 +945,6 @@ void R_ScreenShotJPEG_f (void) {
 
 //============================================================================
 
-/*
-** GL_SetDefaultState
-*/
-void GL_SetDefaultState( void )
-{
-	qglClearDepth( 1.0f );
-
-	qglCullFace(GL_FRONT);
-
-	qglColor4f (1,1,1,1);
-
-	// initialize downstream texture unit if we're running
-	// in a multitexture environment
-	if ( qglActiveTextureARB ) {
-		GL_SelectTexture( 1 );
-		GL_TextureMode( r_textureMode->string );
-		GL_TexEnv( GL_MODULATE );
-		qglDisable( GL_TEXTURE_2D );
-		GL_SelectTexture( 0 );
-	}
-
-	qglEnable(GL_TEXTURE_2D);
-	GL_TextureMode( r_textureMode->string );
-	GL_TexEnv( GL_MODULATE );
-
-	qglShadeModel( GL_SMOOTH );
-	qglDepthFunc( GL_LEQUAL );
-
-	// the vertex array is always enabled, but the color and texture
-	// arrays are enabled and disabled around the compiled vertex array call
-	qglEnableClientState (GL_VERTEX_ARRAY);
-
-	//
-	// make sure our GL state vector is set correctly
-	//
-	glState.glStateBits = GLS_DEPTHTEST_DISABLE | GLS_DEPTHMASK_TRUE;
-
-	qglPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
-	qglDepthMask( GL_TRUE );
-	qglDisable( GL_DEPTH_TEST );
-	qglEnable( GL_SCISSOR_TEST );
-	qglDisable( GL_CULL_FACE );
-	qglDisable( GL_BLEND );
-}
-
 void VK_SetDefaultState(void)
 {
 	vk_d.state.primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1163,7 +1002,6 @@ void VK_SetDefaultState(void)
 	vk_d.state.colorBlend.blendEnable = VK_FALSE;
 }
 
-
 /*
 ================
 GfxInfo_f
@@ -1217,11 +1055,7 @@ void GfxInfo_f( void )
 		ri.Printf( PRINT_ALL, "rendering primitives: " );
 		primitives = r_primitives->integer;
 		if ( primitives == 0 ) {
-			if (glConfig.driverType == OPENGL && qglLockArraysEXT ) {
-				primitives = 2;
-			} else {
-				primitives = 1;
-			}
+			primitives = 1;
 		}
 		if ( primitives == -1 ) {
 			ri.Printf( PRINT_ALL, "none\n" );
@@ -1237,8 +1071,8 @@ void GfxInfo_f( void )
 	ri.Printf( PRINT_ALL, "texturemode: %s\n", r_textureMode->string );
 	ri.Printf( PRINT_ALL, "picmip: %d\n", r_picmip->integer );
 	ri.Printf( PRINT_ALL, "texture bits: %d\n", r_texturebits->integer );
-	ri.Printf( PRINT_ALL, "multitexture: %s\n", enablestrings[qglActiveTextureARB != 0] );
-	ri.Printf( PRINT_ALL, "compiled vertex arrays: %s\n", enablestrings[qglLockArraysEXT != 0 ] );
+	ri.Printf( PRINT_ALL, "multitexture: %s\n", enablestrings[1] );
+	ri.Printf( PRINT_ALL, "compiled vertex arrays: %s\n", enablestrings[0] );
 	ri.Printf( PRINT_ALL, "texenv add: %s\n", enablestrings[glConfig.textureEnvAddAvailable != 0] );
 	ri.Printf( PRINT_ALL, "compressed textures: %s\n", enablestrings[glConfig.textureCompression!=TC_NONE] );
 	if ( r_vertexLight->integer)
@@ -1263,7 +1097,6 @@ void R_Register( void )
 	//
 	// latched and archived variables
 	//
-	r_glDriver = ri.Cvar_Get( "r_glDriver", OPENGL_DRIVER_NAME, CVAR_ARCHIVE | CVAR_LATCH );
 	r_allowExtensions = ri.Cvar_Get( "r_allowExtensions", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_ext_compressed_textures = ri.Cvar_Get( "r_ext_compressed_textures", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_ext_gamma_control = ri.Cvar_Get( "r_ext_gamma_control", "1", CVAR_ARCHIVE | CVAR_LATCH );
@@ -1510,8 +1343,7 @@ void R_Init( void ) {
 	}
 	R_ToggleSmpFrame();
 
-	if (!Q_stricmp(r_glDriver->string, OPENGL_DRIVER_NAME)) InitOpenGL();
-	else if (!Q_stricmp(r_glDriver->string, VULKAN_DRIVER_NAME)) InitVulkan();
+	InitVulkan();
 
 	R_InitImages();
 
@@ -1523,12 +1355,7 @@ void R_Init( void ) {
 
 	R_InitFreeType();
 
-	if (glConfig.driverType == OPENGL) {
-		err = qglGetError();
-		if (err != GL_NO_ERROR)
-			ri.Printf(PRINT_ALL, "glGetError() = 0x%x\n", err);
-	}
-
+	
 	ri.Printf( PRINT_ALL, "----- finished R_Init -----\n" );
     
 }
@@ -1551,7 +1378,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	ri.Cmd_RemoveCommand("gfxinfo");
 	ri.Cmd_RemoveCommand("modelist");
 	ri.Cmd_RemoveCommand("shaderstate");
-
 
 	if (tr.registered) {
 		R_SyncRenderThread();
@@ -1645,8 +1471,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 
 	// shut down platform specific OpenGL/Vulkan stuff
 	if (destroyWindow) {
-		if(glConfig.driverType == OPENGL) GLimp_Shutdown();
-		else if (glConfig.driverType == VULKAN) {
 			VK_DestroyBuffer(&vk_d.indexbuffer);
 			VK_DestroyBuffer(&vk_d.vertexbuffer);
 			VK_DestroyBuffer(&vk_d.normalbuffer);
@@ -1749,12 +1573,10 @@ void RE_Shutdown( qboolean destroyWindow ) {
 			VK_Destroy();
 
 			VKimp_Shutdown();
-		}
 	}
 
 	tr.registered = qfalse;
 }
-
 
 /*
 =============
@@ -1766,13 +1588,7 @@ Touch all images to make sure they are resident
 void RE_EndRegistration( void ) {
 	R_SyncRenderThread();
 
-	if (glConfig.driverType == OPENGL) {
-		if (!Sys_LowPhysicalMemory()) {
-			RB_ShowImages();
-		}
 	}
-}
-
 
 /*
 @@@@@@@@@@@@@@@@@@@@@

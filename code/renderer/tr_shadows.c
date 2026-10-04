@@ -103,18 +103,8 @@ static void R_ExtrudeShadowEdges( void ) {
 }
 
 void R_RenderShadowEdges( void ) {
-    if(glConfig.driverType == OPENGL){
-        qglBegin( GL_QUADS);
-        for (int i = 0; i < numExtrudedEdges; i++) {
-            qglVertex3fv(extrudedEdges[i*4 + 0]);
-            qglVertex3fv(extrudedEdges[i*4 + 1]);
-            qglVertex3fv(extrudedEdges[i*4 + 3]);
-            qglVertex3fv(extrudedEdges[i*4 + 2]);
-        }
-        qglEnd();
-    } else if(glConfig.driverType == VULKAN){
-        tess.numVertexes = numExtrudedEdges * 4;
-		tess.numIndexes = numExtrudedEdges * 6;
+                tess.numVertexes = numExtrudedEdges * 4;
+    	tess.numIndexes = numExtrudedEdges * 6;
         for (int i = 0; i < numExtrudedEdges; i++) {
             tess.indexes[i*6 + 0] = i*4 + 0;
             tess.indexes[i*6 + 1] = i*4 + 2;
@@ -124,21 +114,21 @@ void R_RenderShadowEdges( void ) {
             tess.indexes[i*6 + 5] = i*4 + 1;
         }
         
-		for (int k = 0; k < tess.numVertexes; k++) {
-			VectorSet(tess.svars.colors[k], 51, 51, 51);
-			tess.svars.colors[k][3] = 255;
-		}
-
+    	for (int k = 0; k < tess.numVertexes; k++) {
+    		VectorSet(tess.svars.colors[k], 51, 51, 51);
+    		tess.svars.colors[k][3] = 255;
+    	}
+    
         VK_UploadBufferDataOffset(&vk_d.vertexbuffer, vk_d.offset * sizeof(vec4_t), tess.numVertexes * sizeof(vec4_t), (void*)&extrudedEdges[0]);
         VK_UploadBufferDataOffset(&vk_d.colorbuffer, vk_d.offset * sizeof(color4ub_t), tess.numVertexes * sizeof(color4ub_t), (void *) &tess.svars.colors[0]);
         VK_UploadBufferDataOffset(&vk_d.uvbuffer1, vk_d.offset * sizeof(vec2_t), tess.numVertexes * sizeof(vec2_t), (void *) &tess.svars.texcoords[0]);
-
+    
         myGlMultMatrix(vk_d.modelViewMatrix, vk_d.projectionMatrix, vk_d.mvp);
         tr_api.R_DrawElements(tess.numIndexes, tess.indexes);
-
+    
         vk_d.offset += tess.numVertexes;
         vk_d.offsetIdx += tess.numIndexes;
-    }
+    
 }
 
 /*
@@ -210,46 +200,7 @@ void RB_ShadowTessEnd( void ) {
 	}
 
     R_ExtrudeShadowEdges();
-    if(glConfig.driverType == OPENGL){
-        // draw the silhouette edges
-        GL_Bind( tr.whiteImage );
-        qglEnable( GL_CULL_FACE );
-        tr_api.State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
-        qglColor3f( 0.2f, 0.2f, 0.2f );
-
-        // don't write to the color buffer
-        qglColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
-
-        qglEnable( GL_STENCIL_TEST );
-        qglStencilFunc( GL_ALWAYS, 1, 255 );
-
-        // mirrors have the culling order reversed
-        if ( backEnd.viewParms.isMirror ) {
-            qglCullFace( GL_FRONT );
-            qglStencilOp( GL_KEEP, GL_KEEP, GL_INCR );
-
-            R_RenderShadowEdges();
-
-            qglCullFace( GL_BACK );
-            qglStencilOp( GL_KEEP, GL_KEEP, GL_DECR );
-
-            R_RenderShadowEdges();
-        } else {
-            qglCullFace( GL_BACK );
-            qglStencilOp( GL_KEEP, GL_KEEP, GL_INCR );
-
-            R_RenderShadowEdges();
-
-            qglCullFace( GL_FRONT );
-            qglStencilOp( GL_KEEP, GL_KEEP, GL_DECR );
-
-            R_RenderShadowEdges();
-        }
-
-        // reenable writing to the color buffer
-        qglColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-    } else if (glConfig.driverType == VULKAN){
-        // draw the silhouette edges
+                // draw the silhouette edges
         VK_Bind( tr.whiteImage );
         tr_api.State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
         //qglColor3f( 0.2f, 0.2f, 0.2f );
@@ -276,7 +227,7 @@ void RB_ShadowTessEnd( void ) {
             stencil.depthFailOp = VK_STENCIL_OP_KEEP;
             stencil.passOp = VK_STENCIL_OP_INCREMENT_AND_CLAMP;
             vk_d.state.dsBlend.front = vk_d.state.dsBlend.back = stencil;
-  
+      
             R_RenderShadowEdges();
             
             vk_d.state.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -292,7 +243,7 @@ void RB_ShadowTessEnd( void ) {
             stencil.depthFailOp = VK_STENCIL_OP_KEEP;
             stencil.passOp = VK_STENCIL_OP_INCREMENT_AND_CLAMP;
             vk_d.state.dsBlend.front = vk_d.state.dsBlend.back = stencil;
-
+    
             R_RenderShadowEdges();
             
             vk_d.state.cullMode = VK_CULL_MODE_FRONT_BIT;
@@ -300,10 +251,10 @@ void RB_ShadowTessEnd( void ) {
             stencil.depthFailOp = VK_STENCIL_OP_KEEP;
             stencil.passOp = VK_STENCIL_OP_DECREMENT_AND_CLAMP;
             vk_d.state.dsBlend.front = vk_d.state.dsBlend.back = stencil;
-
+    
             R_RenderShadowEdges();
         }
-    }
+    
 }
 
 
@@ -325,32 +276,7 @@ void RB_ShadowFinish( void ) {
 	if ( glConfig.stencilBits < 4 ) {
 		return;
 	}
-    if(glConfig.driverType == OPENGL){
-        
-        qglEnable( GL_STENCIL_TEST );
-        qglStencilFunc( GL_NOTEQUAL, 0, 255 );
-
-        qglDisable (GL_CLIP_PLANE0);
-        qglDisable (GL_CULL_FACE);
-
-        GL_Bind( tr.whiteImage );
-
-        qglLoadIdentity ();
-
-        qglColor3f( 0.6f, 0.6f, 0.6f );
-        tr_api.State( GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO );
-
-        qglBegin( GL_QUADS );
-        qglVertex3f( -100, 100, -10 );
-        qglVertex3f( 100, 100, -10 );
-        qglVertex3f( 100, -100, -10 );
-        qglVertex3f( -100, -100, -10 );
-        qglEnd ();
-
-        qglColor4f(1,1,1,1);
-        qglDisable( GL_STENCIL_TEST );
-    } else if(glConfig.driverType == VULKAN){
-        //return;
+                //return;
         vk_d.state.dsBlend.stencilTestEnable = VK_TRUE;
         VkStencilOpState stencil = {0};
         stencil.compareOp = VK_COMPARE_OP_NOT_EQUAL;
@@ -365,7 +291,7 @@ void RB_ShadowFinish( void ) {
         VK_Bind( tr.whiteImage );
         
         tr_api.State( GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO );
-
+    
         tess.indexes[0] = 0;
         tess.indexes[1] = 1;
         tess.indexes[2] = 2;
@@ -380,10 +306,10 @@ void RB_ShadowFinish( void ) {
         VectorSet(tess.xyz[3], -100, -100, -10);
         tess.numVertexes = 4;
         
-		for (int k = 0; k < tess.numVertexes; k++) {
-			VectorSet(tess.svars.colors[k], 153, 153, 153);
-			tess.svars.colors[k][3] = 255;
-		}
+    	for (int k = 0; k < tess.numVertexes; k++) {
+    		VectorSet(tess.svars.colors[k], 153, 153, 153);
+    		tess.svars.colors[k][3] = 255;
+    	}
         
         VK_UploadBufferDataOffset(&vk_d.vertexbuffer, vk_d.offset * sizeof(vec4_t), tess.numVertexes * sizeof(vec4_t), (void*)&tess.xyz[0]);
         VK_UploadBufferDataOffset(&vk_d.colorbuffer, vk_d.offset * sizeof(color4ub_t), tess.numVertexes * sizeof(color4ub_t), (void *) &tess.svars.colors[0]);
@@ -396,7 +322,7 @@ void RB_ShadowFinish( void ) {
         vk_d.modelViewMatrix[5] = 1.0f;
         vk_d.modelViewMatrix[10] = 1.0f;
         vk_d.modelViewMatrix[15] = 1.0f;
-
+    
         myGlMultMatrix(vk_d.modelViewMatrix, vk_d.projectionMatrix, vk_d.mvp);
         tr_api.R_DrawElements(tess.numIndexes, tess.indexes);
         
@@ -407,7 +333,7 @@ void RB_ShadowFinish( void ) {
         tess.numIndexes = 0;
         tess.numVertexes = 0;
         Com_Memcpy(vk_d.modelViewMatrix, tmp, 64);
-    }
+    
 }
 
 

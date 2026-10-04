@@ -1657,7 +1657,7 @@ static void ComputeStageIteratorFunc( void )
 						{
 							if ( !shader.numDeforms )
 							{
-								shader.optimalStageIteratorFunc = RB_StageIteratorVertexLitTexture;
+								shader.optimalStageIteratorFunc = RB_StageIteratorGeneric; // (GL fast path removed)
 								goto done;
 							}
 						}
@@ -1683,7 +1683,7 @@ static void ComputeStageIteratorFunc( void )
 					{
 						if ( shader.multitextureEnv )
 						{
-							shader.optimalStageIteratorFunc = RB_StageIteratorLightmappedMultitexture;
+							shader.optimalStageIteratorFunc = RB_StageIteratorGeneric; // (GL fast path removed)
 							goto done;
 						}
 					}
@@ -1748,12 +1748,7 @@ static qboolean CollapseMultitexture( void ) {
 	int i;
 	textureBundle_t tmpBundle;
     //return qfalse;
-    if(glConfig.driverType == OPENGL){
-        if ( !qglActiveTextureARB ) {
-            return qfalse;
-        }
-    }
-	// make sure both stages are active
+    	// make sure both stages are active
 	if ( !stages[0].active || !stages[1].active ) {
 		return qfalse;
 	}
@@ -2933,10 +2928,6 @@ void	R_ShaderList_f (void) {
 			ri.Printf( PRINT_ALL, "gen " );
 		} else if ( shader->optimalStageIteratorFunc == RB_StageIteratorSky ) {
 			ri.Printf( PRINT_ALL, "sky " );
-		} else if ( shader->optimalStageIteratorFunc == RB_StageIteratorLightmappedMultitexture ) {
-			ri.Printf( PRINT_ALL, "lmmt" );
-		} else if ( shader->optimalStageIteratorFunc == RB_StageIteratorVertexLitTexture ) {
-			ri.Printf( PRINT_ALL, "vlt " );
 		} else {
 			ri.Printf( PRINT_ALL, "    " );
 		}

@@ -35,10 +35,11 @@ void IN_Shutdown (void);
 void IN_JoyMove( void );
 void IN_StartupJoystick( void );
 
-// GL subsystem
-qboolean QGL_Init( const char *dllname );
-void QGL_EnableLogging( qboolean enable );
-void QGL_Shutdown( void );
+// Vulkan subsystem (linux_vkimp.c / linux_qvk.c)
+qboolean QVK_Init( const char *dllname );
+void QVK_Shutdown( void );
+void VKimp_Init( void );
+void VKimp_Shutdown( void );
 
 // bk001130 - win32
 // void IN_JoystickCommands (void);

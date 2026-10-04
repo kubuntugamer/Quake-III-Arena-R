@@ -28,7 +28,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../qcommon/qfiles.h"
 #include "../qcommon/qcommon.h"
 #include "tr_public.h"
-#include "qgl.h"
 #include "qvk.h"
 #include "../../shader/glsl/constants.h"
 
@@ -96,7 +95,7 @@ typedef struct image_s {
 	char		imgName[MAX_QPATH];		// game path, including extension
 	int			width, height;				// source image
 	int			uploadWidth, uploadHeight;	// after power of two and picmip but not including clamp to MAX_TEXTURE_SIZE
-	GLuint		texnum;					// gl texture binding
+	unsigned int	texnum;				// legacy gl texture binding (unused, Vulkan-only)
 
 	int			frameUsed;			// for texture usage in frame statistics
 
@@ -1728,7 +1727,6 @@ extern	cvar_t	*r_colorMipLevels;				// development aid to see texture mip usage
 extern	cvar_t	*r_picmip;						// controls picmip values
 extern	cvar_t	*r_finish;
 extern	cvar_t	*r_drawBuffer;
-extern  cvar_t  *r_glDriver;
 extern	cvar_t	*r_swapInterval;
 extern	cvar_t	*r_textureMode;
 extern	cvar_t	*r_offsetFactor;
@@ -1857,7 +1855,6 @@ swapChainSupportDetails_t querySwapChainSupport(VkPhysicalDevice device, VkSurfa
 void	VK_SetDefaultState(void);
 
 // cross-TU prototypes (GCC 14+ treats implicit declarations as errors)
-void R_SetOpenGLApi(trApi_t* api);
 void R_SetVulkanApi(trApi_t *api);
 void VKimp_Init(void);
 void VKimp_Shutdown(void);
@@ -2021,15 +2018,37 @@ qboolean RB_IsTransparent(shader_t* shader);
 qboolean RB_SkipObject(shader_t* shader);
 qboolean RB_IsLight(shader_t* shader);
 
-/*
-** GL wrapper/helper functions
-*/
-void	GL_Bind( image_t *image );
-void	GL_SetDefaultState (void);
-void	GL_SelectTexture( int unit );
-void	GL_TextureMode( const char *string );
-void	GL_CheckErrors( void );
-void	GL_TexEnv( int env );
+
+/* Legacy GL enum tokens kept as opaque values (no GL backend remains).
+   Used by VK_TexEnv/multitextureEnv tables and draw-buffer selection. */
+#ifndef GL_MODULATE
+#define GL_MODULATE 0x2100
+#define GL_DECAL 0x2101
+#define GL_BLEND 0x2102
+#define GL_REPLACE 0x2103
+#define GL_ADD 0x0104
+#define GL_REPEAT 0x2901
+#define GL_CLAMP 0x2900
+#define GL_FRONT 0x0404
+#define GL_BACK 0x0405
+#define GL_FRONT_AND_BACK 0x0408
+#define GL_DEPTH_BUFFER_BIT 0x00000100
+#define GL_STENCIL_BUFFER_BIT 0x00000400
+#define GL_COLOR_BUFFER_BIT 0x00004000
+#define GL_BACK_LEFT 0x0402
+#define GL_BACK_RIGHT 0x0403
+#define GL_NEAREST 0x2600
+#define GL_LINEAR 0x2601
+#define GL_NEAREST_MIPMAP_NEAREST 0x2700
+#define GL_LINEAR_MIPMAP_NEAREST 0x2701
+#define GL_NEAREST_MIPMAP_LINEAR 0x2702
+#define GL_LINEAR_MIPMAP_LINEAR 0x2703
+#define GL_RGBA8 0x8058
+#define GL_RGB8 0x8051
+#define GL_RGB4_S3TC 0x83A3
+#define GL_RGBA4 0x8056
+#define GL_RGB5 0x8050
+#endif
 
 #define GLS_SRCBLEND_ZERO						0x00000001
 #define GLS_SRCBLEND_ONE						0x00000002
@@ -2130,22 +2149,10 @@ IMPLEMENTATION SPECIFIC FUNCTIONS
 ====================================================================
 */
 
-void		GLimp_Init( void );
-void		GLimp_Shutdown( void );
-void		GLimp_EndFrame( void );
-
 qboolean	GLimp_SpawnRenderThread( void (*function)( void ) );
 void		*GLimp_RendererSleep( void );
 void		GLimp_FrontEndSleep( void );
 void		GLimp_WakeRenderer( void *data );
-
-void		GLimp_LogComment( char *comment );
-
-// NOTE TTimo linux works with float gamma value, not the gamma table
-//   the params won't be used, getting the r_gamma cvar directly
-void		GLimp_SetGamma( unsigned char red[256], 
-						    unsigned char green[256],
-							unsigned char blue[256] );
 
 
 /*
@@ -2207,8 +2214,6 @@ void RB_CheckOverflow( int verts, int indexes );
 
 void RB_StageIteratorGeneric( void );
 void RB_StageIteratorSky( void );
-void RB_StageIteratorVertexLitTexture( void );
-void RB_StageIteratorLightmappedMultitexture( void );
 
 void RB_AddQuadStamp( vec3_t origin, vec3_t left, vec3_t up, byte *color );
 void RB_AddQuadStampExt( vec3_t origin, vec3_t left, vec3_t up, byte *color, float s1, float t1, float s2, float t2 );

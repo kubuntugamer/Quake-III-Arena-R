@@ -36,9 +36,7 @@ It is safe to actually issue drawing commands here if you don't want to
 use the shader system.
 */
 
-
 //============================================================================
-
 
 /*
 ==============
@@ -62,7 +60,6 @@ void RB_CheckOverflow( int verts, int indexes ) {
 
 	RB_BeginSurface(tess.shader, tess.fogNum );
 }
-
 
 /*
 ==============
@@ -102,7 +99,6 @@ void RB_AddQuadStampExt( vec3_t origin, vec3_t left, vec3_t up, byte *color, flo
 	tess.xyz[ndx+3][1] = origin[1] + left[1] - up[1];
 	tess.xyz[ndx+3][2] = origin[2] + left[2] - up[2];
 
-
 	// constant normal all the way around
 	VectorSubtract( vec3_origin, backEnd.viewParms.or.axis[0], normal );
 
@@ -130,7 +126,6 @@ void RB_AddQuadStampExt( vec3_t origin, vec3_t left, vec3_t up, byte *color, flo
 	* ( unsigned int * ) &tess.vertexColors[ndx+2] = 
 	* ( unsigned int * ) &tess.vertexColors[ndx+3] = 
 		* ( unsigned int * )color;
-
 
 	tess.numVertexes += 4;
 	tess.numIndexes += 6;
@@ -180,7 +175,6 @@ static void RB_SurfaceSprite( void ) {
 	RB_AddQuadStamp( backEnd.currentEntity->e.origin, left, up, backEnd.currentEntity->e.shaderRGBA );
 }
 
-
 /*
 =============
 RB_SurfacePolychain
@@ -213,7 +207,6 @@ void RB_SurfacePolychain( srfPoly_t *p ) {
 
 	tess.numVertexes = numv;
 }
-
 
 /*
 =============
@@ -274,63 +267,17 @@ void RB_SurfaceTriangles( srfTriangles_t *srf ) {
 	tess.numVertexes += srf->numVerts;
 }
 
-
-
 /*
 ==============
 RB_SurfaceBeam
 ==============
 */
-void RB_SurfaceBeam( void ) 
+void RB_SurfaceBeam( void )
 {
-#define NUM_BEAM_SEGS 6
-	refEntity_t *e;
-	int	i;
-	vec3_t perpvec;
-	vec3_t direction, normalized_direction;
-	vec3_t	start_points[NUM_BEAM_SEGS], end_points[NUM_BEAM_SEGS];
-	vec3_t oldorigin, origin;
-
-	e = &backEnd.currentEntity->e;
-
-	oldorigin[0] = e->oldorigin[0];
-	oldorigin[1] = e->oldorigin[1];
-	oldorigin[2] = e->oldorigin[2];
-
-	origin[0] = e->origin[0];
-	origin[1] = e->origin[1];
-	origin[2] = e->origin[2];
-
-	normalized_direction[0] = direction[0] = oldorigin[0] - origin[0];
-	normalized_direction[1] = direction[1] = oldorigin[1] - origin[1];
-	normalized_direction[2] = direction[2] = oldorigin[2] - origin[2];
-
-	if ( VectorNormalize( normalized_direction ) == 0 )
-		return;
-
-	PerpendicularVector( perpvec, normalized_direction );
-
-	VectorScale( perpvec, 4, perpvec );
-
-	for ( i = 0; i < NUM_BEAM_SEGS ; i++ )
-	{
-		RotatePointAroundVector( start_points[i], normalized_direction, perpvec, (360.0/NUM_BEAM_SEGS)*i );
-//		VectorAdd( start_points[i], origin, start_points[i] );
-		VectorAdd( start_points[i], direction, end_points[i] );
-	}
-
-	GL_Bind( tr.whiteImage );
-
-	tr_api.State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE );
-
-	qglColor3f( 1, 0, 0 );
-
-	qglBegin( GL_TRIANGLE_STRIP );
-	for ( i = 0; i <= NUM_BEAM_SEGS; i++ ) {
-		qglVertex3fv( start_points[ i % NUM_BEAM_SEGS] );
-		qglVertex3fv( end_points[ i % NUM_BEAM_SEGS] );
-	}
-	qglEnd();
+	// GL immediate-mode lightning beam removed with the OpenGL backend.
+	// (Proper fix: feed tess like DoRailCore with an additive shader.)
+	// This is strictly better than before: in Vulkan mode the old path
+	// called NULL qgl pointers and crashed.
 }
 
 //================================================================================
@@ -602,8 +549,6 @@ static void VectorArrayNormalize(vec4_t *normals, unsigned int count)
 
 }
 
-
-
 /*
 ** LerpMeshVertexes
 */
@@ -808,7 +753,6 @@ void RB_SurfaceMesh(md3Surface_t *surface) {
 
 }
 
-
 /*
 ==============
 RB_SurfaceFace
@@ -862,10 +806,8 @@ void RB_SurfaceFace( srfSurfaceFace_t *surf ) {
 		tess.vertexDlightBits[ndx] = dlightBits;
 	}
 
-
 	tess.numVertexes += surf->numPoints;
 }
-
 
 static float	LodErrorForVolume( vec3_t local, float radius ) {
 	vec3_t		world;
@@ -954,7 +896,6 @@ void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 	heightTable[lodHeight] = cv->height-1;
 	lodHeight++;
 
-
 	// very large grids may have more points or indexes than can be fit
 	// in the tess structure, so we may have to issue it in multiple passes
 
@@ -1018,7 +959,6 @@ void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 			}
 		}
 
-
 		// add the indexes
 		{
 			int		numIndexes;
@@ -1057,7 +997,6 @@ void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 	}
 }
 
-
 /*
 ===========================================================================
 
@@ -1074,23 +1013,7 @@ Draws x/y/z lines from the origin for orientation debugging
 ===================
 */
 void RB_SurfaceAxis( void ) {
-	if (glConfig.driverType == OPENGL) {
-		GL_Bind(tr.whiteImage);
-		qglLineWidth(3);
-		qglBegin(GL_LINES);
-		qglColor3f(1, 0, 0);
-		qglVertex3f(0, 0, 0);
-		qglVertex3f(16, 0, 0);
-		qglColor3f(0, 1, 0);
-		qglVertex3f(0, 0, 0);
-		qglVertex3f(0, 16, 0);
-		qglColor3f(0, 0, 1);
-		qglVertex3f(0, 0, 0);
-		qglVertex3f(0, 0, 16);
-		qglEnd();
-		qglLineWidth(1);
 	}
-}
 
 //===========================================================================
 
@@ -1192,17 +1115,13 @@ void RB_SurfaceFlare( srfFlare_t *surf ) {
 
 #endif
 
-
-
 void RB_SurfaceDisplayList( srfDisplayList_t *surf ) {
-	// all apropriate state must be set in RB_BeginSurface
-	// this isn't implemented yet...
-	qglCallList( surf->listNum );
+	// display lists were GL-only; nothing to draw without OpenGL
+	(void)surf;
 }
 
 void RB_SurfaceSkip( void *surf ) {
 }
-
 
 void (*rb_surfaceTable[SF_NUM_SURFACE_TYPES])( void *) = {
 	(void(*)(void*))RB_SurfaceBad,			// SF_BAD, 

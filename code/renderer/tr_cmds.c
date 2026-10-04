@@ -318,27 +318,9 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 	//
 	if ( r_measureOverdraw->integer )
 	{
-		if ( glConfig.stencilBits < 4 )
-		{
-			ri.Printf( PRINT_ALL, "Warning: not enough stencil bits to measure overdraw: %d\n", glConfig.stencilBits );
-			ri.Cvar_Set( "r_measureOverdraw", "0" );
-			r_measureOverdraw->modified = qfalse;
-		}
-		else if ( r_shadows->integer == 2 )
-		{
-			ri.Printf( PRINT_ALL, "Warning: stencil shadows and overdraw measurement are mutually exclusive\n" );
-			ri.Cvar_Set( "r_measureOverdraw", "0" );
-			r_measureOverdraw->modified = qfalse;
-		}
-		else
-		{
-			R_SyncRenderThread();
-			qglEnable( GL_STENCIL_TEST );
-			qglStencilMask( ~0U );
-			qglClearStencil( 0U );
-			qglStencilFunc( GL_ALWAYS, 0U, ~0U );
-			qglStencilOp( GL_KEEP, GL_INCR, GL_INCR );
-		}
+		// stencil-readback overdraw measurement was GL-only; force off
+		ri.Printf( PRINT_ALL, "Warning: r_measureOverdraw is not supported without OpenGL\n" );
+		ri.Cvar_Set( "r_measureOverdraw", "0" );
 		r_measureOverdraw->modified = qfalse;
 	}
 	else
@@ -346,20 +328,8 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 		// this is only reached if it was on and is now off
 		if ( r_measureOverdraw->modified ) {
 			R_SyncRenderThread();
-			if (glConfig.driverType == OPENGL) qglDisable( GL_STENCIL_TEST );
-			if (glConfig.driverType == VULKAN) vk_d.state.dsBlend.stencilTestEnable = VK_FALSE;
+			r_measureOverdraw->modified = qfalse;
 		}
-		r_measureOverdraw->modified = qfalse;
-	}
-
-	//
-	// texturemode stuff
-	//
-	if ( r_textureMode->modified ) {
-		R_SyncRenderThread();
-		if (glConfig.driverType == OPENGL) GL_TextureMode( r_textureMode->string );
-        if (glConfig.driverType == VULKAN) VK_TextureMode( r_textureMode->string );
-		r_textureMode->modified = qfalse;
 	}
 
 	//
@@ -371,16 +341,6 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 		R_SyncRenderThread();
 		R_SetColorMappings();
 	}
-
-    // check for errors
-    if ( !r_ignoreGLErrors->integer ) {
-        int	err;
-
-		R_SyncRenderThread();
-        if ( ( err = qglGetError() ) != GL_NO_ERROR ) {
-            ri.Error( ERR_FATAL, "RE_BeginFrame() - glGetError() failed (0x%x)!\n", err );
-        }
-    }
 
 	//
 	// draw buffer stuff

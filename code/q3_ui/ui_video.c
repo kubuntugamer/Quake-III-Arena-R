@@ -240,10 +240,9 @@ GRAPHICS OPTIONS MENU
 
 static const char *s_drivers[] =
 {
-	OPENGL_DRIVER_NAME,
 	VULKAN_DRIVER_NAME,
 	0
-};
+}; // Vulkan-only (OpenGL backend removed)
 
 #define ID_BACK2		101
 #define ID_FULLSCREEN	102
@@ -384,24 +383,10 @@ GraphicsOptions_UpdateMenuItems
 static void GraphicsOptions_UpdateMenuItems( void )
 {
 
-	if (s_graphicsoptions.driver.curvalue == VULKAN) {
-		s_graphicsoptions.allow_extensions.generic.flags |= QMF_GRAYED;
-		s_graphicsoptions.lighting.numitems = 3;
-	}
-	else {
-		s_graphicsoptions.allow_extensions.generic.flags &= ~QMF_GRAYED;
-		s_graphicsoptions.lighting.numitems = 2;
-	}
-
-	if ( s_graphicsoptions.driver.curvalue ==  OPENGL)
-	{
-		s_graphicsoptions.rtx.curvalue = 0;
-		s_graphicsoptions.rtx.generic.flags |= QMF_GRAYED;
-	}
-	else
-	{
-		s_graphicsoptions.rtx.generic.flags &= ~QMF_GRAYED;
-	}
+	// Vulkan-only: extensions unsupported, full lighting range, RTX available
+	s_graphicsoptions.allow_extensions.generic.flags |= QMF_GRAYED;
+	s_graphicsoptions.lighting.numitems = 3;
+	s_graphicsoptions.rtx.generic.flags &= ~QMF_GRAYED;
 
 	if ( s_graphicsoptions.allow_extensions.curvalue == 0 )
 	{
@@ -628,13 +613,8 @@ static void GraphicsOptions_SetMenuItems( void )
 		s_graphicsoptions.tq.curvalue = 3;
 	}
 
-	
-	if (s_graphicsoptions.driver.curvalue == VULKAN) {
-		s_graphicsoptions.lighting.curvalue = trap_Cvar_VariableValue("r_vertexLight");
-	}
-	else {
-		s_graphicsoptions.lighting.curvalue = trap_Cvar_VariableValue("r_vertexLight") != 0;
-	}
+
+	s_graphicsoptions.lighting.curvalue = trap_Cvar_VariableValue("r_vertexLight");
 
 	switch ( ( int ) trap_Cvar_VariableValue( "r_texturebits" ) )
 	{
@@ -710,7 +690,6 @@ void GraphicsOptions_MenuInit( void )
 {
     static const char *s_driver_names[] =
     {
-        "OpenGL",
         "Vulkan",
         0
     };
@@ -879,7 +858,7 @@ void GraphicsOptions_MenuInit( void )
 	s_graphicsoptions.driver.generic.x     = 400;
 	s_graphicsoptions.driver.generic.y     = y;
 	s_graphicsoptions.driver.itemnames     = s_driver_names;
-	s_graphicsoptions.driver.curvalue	   = uis.glconfig.driverType;
+	s_graphicsoptions.driver.curvalue	   = 0; // Vulkan-only
 	y += BIGCHAR_HEIGHT+2;
 
 	// references/modifies "r_allowExtensions"

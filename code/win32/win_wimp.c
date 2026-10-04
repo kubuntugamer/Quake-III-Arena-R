@@ -367,9 +367,7 @@ static qboolean W_CreateWindow(const char* drivername, int width, int height, in
 		ri.Printf(PRINT_ALL, "...window already present, CreateWindowEx skipped\n");
 	}
 
-	qboolean initDriver = qfalse;
-	if (glConfig.driverType == OPENGL) initDriver = GLW_InitDriver(drivername, colorbits);
-	else if(glConfig.driverType == VULKAN) initDriver = VKW_InitDriver(drivername, colorbits);
+	qboolean initDriver = VKW_InitDriver(drivername, colorbits);
 
 	if (!initDriver)
 	{
@@ -412,5 +410,105 @@ static void PrintCDSError(int value)
 		ri.Printf(PRINT_ALL, "unknown error %d\n", value);
 		break;
 	}
+}
+
+/*
+** SMP render-thread support (moved from win_glimp.c during Vulkan-only port)
+*/
+
+/*
+===========================================================
+
+SMP acceleration
+
+===========================================================
+*/
+
+HANDLE	renderCommandsEvent;
+HANDLE	renderCompletedEvent;
+HANDLE	renderActiveEvent;
+
+void (*glimpRenderThread)( void );
+
+void GLimp_RenderThreadWrapper( void ) {
+	glimpRenderThread();
+
+	// Vulkan needs no context juggling on the render thread
+}
+
+/*
+=======================
+GLimp_SpawnRenderThread
+=======================
+*/
+HANDLE	renderThreadHandle;
+int		renderThreadId;
+qboolean GLimp_SpawnRenderThread( void (*function)( void ) ) {
+
+	renderCommandsEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
+	renderCompletedEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
+	renderActiveEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
+
+	glimpRenderThread = function;
+
+	renderThreadHandle = CreateThread(
+	   NULL,	// LPSECURITY_ATTRIBUTES lpsa,
+	   0,		// DWORD cbStack,
+	   (LPTHREAD_START_ROUTINE)GLimp_RenderThreadWrapper,	// LPTHREAD_START_ROUTINE lpStartAddr,
+	   0,			// LPVOID lpvThreadParm,
+	   0,			//   DWORD fdwCreate,
+	   &renderThreadId );
+
+	if ( !renderThreadHandle ) {
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+static	void	*smpData;
+
+void *GLimp_RendererSleep( void ) {
+	void	*data;
+
+	}
+
+	ResetEvent( renderActiveEvent );
+
+	// after this, the front end can exit GLimp_FrontEndSleep
+	SetEvent( renderCompletedEvent );
+
+	WaitForSingleObject( renderCommandsEvent, INFINITE );
+
+	}
+
+	ResetEvent( renderCompletedEvent );
+	ResetEvent( renderCommandsEvent );
+
+	data = smpData;
+
+	// after this, the main thread can exit GLimp_WakeRenderer
+	SetEvent( renderActiveEvent );
+
+	return data;
+}
+
+
+void GLimp_FrontEndSleep( void ) {
+	WaitForSingleObject( renderCompletedEvent, INFINITE );
+
+	}
+}
+
+
+void GLimp_WakeRenderer( void *data ) {
+	smpData = data;
+
+	}
+
+	// after this, the renderer can continue through GLimp_RendererSleep
+	SetEvent( renderCommandsEvent );
+
+	WaitForSingleObject( renderActiveEvent, INFINITE );
 }
 

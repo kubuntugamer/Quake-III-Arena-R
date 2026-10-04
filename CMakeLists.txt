@@ -57,11 +57,6 @@ if(WIN32)
 	
 	#add_definitions(-DVK_USE_PLATFORM_WIN32_KHR)
 elseif(APPLE)
-	find_package(OpenGL REQUIRED)
-	if (OpenGL_FOUND)
-		message(STATUS "Found OpenGL")
-	endif (OpenGL_FOUND)
-
 	# check Vulkan
 	find_package(Vulkan REQUIRED)
 	find_path(VULKAN_INCLUDE_DIR NAMES vulkan/vulkan.h HINTS
@@ -77,11 +72,6 @@ elseif(APPLE)
 	#set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 	set(CMAKE_XCODE_GENERATE_SCHEME TRUE)
 else(UNIX)
-	find_package(OpenGL REQUIRED)
-	if (OpenGL_FOUND)
-		message(STATUS "Found OpenGL")
-	endif (OpenGL_FOUND)
-
 	find_package(X11 REQUIRED)
 	if (X11_FOUND)
 		message(STATUS "Found X11")
@@ -98,9 +88,6 @@ else(UNIX)
 	#find_package(Threads REQUIRED)
 	#set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
-
-# OpenGL
-find_package(OpenGL REQUIRED)
 
 # OUTPUT DIR
 # DEFAULT

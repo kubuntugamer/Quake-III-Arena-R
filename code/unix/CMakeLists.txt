@@ -28,11 +28,9 @@ foreach(FILE ${SOURCES})
     source_group("${GROUP}" FILES "${FILE}")
 endforeach()
 
-#find_package(OpenGL REQUIRED)
 #find_package(GLEW REQUIRED)
 
 # INCLUDE
-include_directories(${OPENGL_INCLUDE_DIR})
 include_directories(${X11_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/code/renderer)
 include_directories(${CMAKE_SOURCE_DIR}/code/qcommon)
@@ -41,7 +39,6 @@ include_directories(${CMAKE_SOURCE_DIR}/code/botlib)
 
 # EXECUTABLE
 add_executable(${APP_UNIX} ${SOURCES})
-target_link_libraries(${APP_UNIX} "${OPENGL_LIBRARIES}")
 target_link_libraries(${APP_UNIX} "${X11_LIBRARIES}")
 target_link_libraries(${APP_UNIX} "${CMAKE_DL_LIBS}")
 # NOTE: Vulkan resolved at runtime via dlopen (see renderer/CMakeLists.txt)

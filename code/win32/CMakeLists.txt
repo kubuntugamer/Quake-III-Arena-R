@@ -29,7 +29,6 @@ foreach(FILE ${SOURCES})
 endforeach()
 
 # INCLUDE
-include_directories(${OPENGL_INCLUDE_DIR})
 include_directories(${VULKAN_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/code/renderer)
 include_directories(${CMAKE_SOURCE_DIR}/code/qcommon)

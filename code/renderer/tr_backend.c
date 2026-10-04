@@ -24,7 +24,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 backEndData_t	*backEndData[SMP_FRAMES];
 backEndState_t	backEnd;
 
-
 static float	s_flipMatrix[16] = {
 	// convert from our coordinate system (looking down X)
 	// to OpenGL's coordinate system (looking down -Z)
@@ -33,31 +32,6 @@ static float	s_flipMatrix[16] = {
 	0, 1, 0, 0,
 	0, 0, 0, 1
 };
-
-
-/*
-** GL_Bind
-*/
-void GL_Bind( image_t *image ) {
-	int texnum;
-
-	if ( !image ) {
-		ri.Printf( PRINT_WARNING, "GL_Bind: NULL image\n" );
-		texnum = tr.defaultImage->texnum;
-	} else {
-		texnum = image->texnum;
-	}
-
-	if ( r_nobind->integer && tr.dlightImage ) {		// performance evaluation option
-		texnum = tr.dlightImage->texnum;
-	}
-
-	if ( glState.currenttextures[glState.currenttmu] != texnum ) {
-		image->frameUsed = tr.frameCount;
-		glState.currenttextures[glState.currenttmu] = texnum;
-		qglBindTexture (GL_TEXTURE_2D, texnum);
-	}
-}
 
 void VK_Bind( image_t *image ) {
     int index;
@@ -82,97 +56,6 @@ void VK_Bind( image_t *image ) {
 //        glState.currenttextures[glState.currenttmu] = texnum;
 //        qglBindTexture (GL_TEXTURE_2D, texnum);
 //    }
-}
-
-/*
-** GL_SelectTexture
-*/
-void GL_SelectTexture( int unit )
-{
-	if ( glState.currenttmu == unit )
-	{
-		return;
-	}
-
-	if ( unit == 0 )
-	{
-		qglActiveTextureARB( GL_TEXTURE0_ARB );
-		GLimp_LogComment( "glActiveTextureARB( GL_TEXTURE0_ARB )\n" );
-		qglClientActiveTextureARB( GL_TEXTURE0_ARB );
-		GLimp_LogComment( "glClientActiveTextureARB( GL_TEXTURE0_ARB )\n" );
-	}
-	else if ( unit == 1 )
-	{
-		qglActiveTextureARB( GL_TEXTURE1_ARB );
-		GLimp_LogComment( "glActiveTextureARB( GL_TEXTURE1_ARB )\n" );
-		qglClientActiveTextureARB( GL_TEXTURE1_ARB );
-		GLimp_LogComment( "glClientActiveTextureARB( GL_TEXTURE1_ARB )\n" );
-	} else {
-		ri.Error( ERR_DROP, "GL_SelectTexture: unit = %i", unit );
-	}
-
-	glState.currenttmu = unit;
-}
-
-
-/*
-** GL_BindMultitexture
-*/
-void GL_BindMultitexture( image_t *image0, GLuint env0, image_t *image1, GLuint env1 ) {
-	int		texnum0, texnum1;
-
-	texnum0 = image0->texnum;
-	texnum1 = image1->texnum;
-
-	if ( r_nobind->integer && tr.dlightImage ) {		// performance evaluation option
-		texnum0 = texnum1 = tr.dlightImage->texnum;
-	}
-
-	if ( glState.currenttextures[1] != texnum1 ) {
-		GL_SelectTexture( 1 );
-		image1->frameUsed = tr.frameCount;
-		glState.currenttextures[1] = texnum1;
-		qglBindTexture( GL_TEXTURE_2D, texnum1 );
-	}
-	if ( glState.currenttextures[0] != texnum0 ) {
-		GL_SelectTexture( 0 );
-		image0->frameUsed = tr.frameCount;
-		glState.currenttextures[0] = texnum0;
-		qglBindTexture( GL_TEXTURE_2D, texnum0 );
-	}
-}
-
-/*
-** GL_TexEnv
-*/
-void GL_TexEnv( int env )
-{
-	if ( env == glState.texEnv[glState.currenttmu] )
-	{
-		return;
-	}
-
-	glState.texEnv[glState.currenttmu] = env;
-
-
-	switch ( env )
-	{
-	case GL_MODULATE:
-		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
-		break;
-	case GL_REPLACE:
-		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
-		break;
-	case GL_DECAL:
-		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL );
-		break;
-	case GL_ADD:
-		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_ADD );
-		break;
-	default:
-		ri.Error( ERR_DROP, "GL_TexEnv: invalid env '%d' passed\n", env );
-		break;
-	}
 }
 
 void VK_TexEnv(int env)
@@ -215,19 +98,14 @@ static void RB_Hyperspace( void ) {
 	}
 
 	c = ( backEnd.refdef.time & 255 ) / 255.0f;
-    if ( glConfig.driverType == OPENGL ) {
-        qglClearColor( c, c, c, 1 );
-        qglClear( GL_COLOR_BUFFER_BIT );
-    } else if ( glConfig.driverType == VULKAN ) {
-		vec4_t color;
-		color[0] = color[1] = color[2] = c;
-		color[3] = 1;
+            	vec4_t color;
+    	color[0] = color[1] = color[2] = c;
+    	color[3] = 1;
         VK_ClearAttachments(qfalse, qfalse, qtrue, color);
-    }
+    
 
 	backEnd.isHyperspace = qtrue;
 }
-
 
 /*
 =================
@@ -241,11 +119,6 @@ void RB_BeginDrawingView (void) {
 	int clearBits = 0;
     vec4_t clearColor = {0, 0, 0, 0};
 
-	// sync with gl if needed
-	if ( r_finish->integer == 1 && !glState.finishCalled ) {
-		qglFinish ();
-		glState.finishCalled = qtrue;
-	}
 	if ( r_finish->integer == 0 ) {
 		glState.finishCalled = qtrue;
 	}
@@ -277,15 +150,9 @@ void RB_BeginDrawingView (void) {
 #else
         clearColor[0] = clearColor[1] = clearColor[2] = 0.0f; clearColor[3] = 1.0f;
 #endif
-        if ( glConfig.driverType == OPENGL ) {
-            qglClearColor( clearColor[0], clearColor[1], clearColor[2], clearColor[3] );    // FIXME: get color of sky
-        }
-	}
-    if ( glConfig.driverType == OPENGL ) {
-        qglClear( clearBits );
-    } else if ( glConfig.driverType == VULKAN ) {
-        VK_ClearAttachments(clearBits & GL_DEPTH_BUFFER_BIT, clearBits & GL_STENCIL_BUFFER_BIT, clearBits & GL_COLOR_BUFFER_BIT, clearColor);
-    }
+        	}
+                VK_ClearAttachments(clearBits & GL_DEPTH_BUFFER_BIT, clearBits & GL_STENCIL_BUFFER_BIT, clearBits & GL_COLOR_BUFFER_BIT, clearColor);
+    
     
 	if ( ( backEnd.refdef.rdflags & RDF_HYPERSPACE ) )
 	{
@@ -317,27 +184,18 @@ void RB_BeginDrawingView (void) {
 		plane2[2] = DotProduct (backEnd.viewParms.or.axis[2], plane);
 		plane2[3] = DotProduct (plane, backEnd.viewParms.or.origin) - plane[3];
 		
-        if ( glConfig.driverType == OPENGL ) {
-            qglLoadMatrixf( s_flipMatrix );
-            qglClipPlane (GL_CLIP_PLANE0, plane2);
-            qglEnable (GL_CLIP_PLANE0);
-        } else if ( glConfig.driverType == VULKAN ) {
-            // multiply plane with s_flipMatrix
-            vk_d.clipPlane[0] = -plane2[1];
-            vk_d.clipPlane[1] =  plane2[2];
-            vk_d.clipPlane[2] = -plane2[0];
-            vk_d.clipPlane[3] =  plane2[3];
-            vk_d.clip = qtrue;
-        }
+                                // multiply plane with s_flipMatrix
+                vk_d.clipPlane[0] = -plane2[1];
+                vk_d.clipPlane[1] =  plane2[2];
+                vk_d.clipPlane[2] = -plane2[0];
+                vk_d.clipPlane[3] =  plane2[3];
+                vk_d.clip = qtrue;
+            
 	} else {
-        if ( glConfig.driverType == OPENGL ) {
-            qglDisable (GL_CLIP_PLANE0);
-        } else if ( glConfig.driverType == VULKAN ) {
-            vk_d.clip = qfalse;
-        }
+                                vk_d.clip = qfalse;
+            
 	}
 }
-
 
 #define	MAC_EVENT_PUMP_MSEC		5
 
@@ -356,7 +214,6 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	drawSurf_t		*drawSurf;
 	int				oldSort;
 	float			originalTime;
-
 
 	// save original time for entity shader offsets
 	originalTime = backEnd.refdef.floatTime;
@@ -438,31 +295,21 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 			}
 			
 
-            if ( glConfig.driverType == OPENGL ) {
-                qglLoadMatrixf( backEnd.or.modelMatrix );
-            } else if ( glConfig.driverType == VULKAN ) {
-                Com_Memcpy(vk_d.modelViewMatrix, backEnd.or.modelMatrix, 64);
-            }
+                                                Com_Memcpy(vk_d.modelViewMatrix, backEnd.or.modelMatrix, 64);
+                    
 
 			//
 			// change depthrange if needed
 			//
 			if ( oldDepthRange != depthRange ) {
-                if ( glConfig.driverType == OPENGL ) {
-                    if ( depthRange ) {
-                        qglDepthRange (0, 0.3);
-                    } else {
-                        qglDepthRange (0, 1);
-                    }
-                } else if ( glConfig.driverType == VULKAN ) {
-                    if ( depthRange ) {
-                        vk_d.viewport.minDepth = 0.0f;
-                        vk_d.viewport.maxDepth = 0.3f;
-                    } else {
-                        vk_d.viewport.minDepth = 0.0f;
-                        vk_d.viewport.maxDepth = 1.0f;
-                    }
-                }
+                                                                if ( depthRange ) {
+                                    vk_d.viewport.minDepth = 0.0f;
+                                    vk_d.viewport.maxDepth = 0.3f;
+                                } else {
+                                    vk_d.viewport.minDepth = 0.0f;
+                                    vk_d.viewport.maxDepth = 1.0f;
+                                }
+                            
 				oldDepthRange = depthRange;
 			}
 
@@ -481,18 +328,12 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	}
 
 	// go back to the world modelview matrix
-    if ( glConfig.driverType == OPENGL ) {
-        qglLoadMatrixf( backEnd.viewParms.world.modelMatrix );
-    } else if ( glConfig.driverType == VULKAN ) {
-        Com_Memcpy(vk_d.modelViewMatrix, backEnd.viewParms.world.modelMatrix, 64);
-    }
+                Com_Memcpy(vk_d.modelViewMatrix, backEnd.viewParms.world.modelMatrix, 64);
+    
 	if ( depthRange ) {
-        if ( glConfig.driverType == OPENGL ) {
-            qglDepthRange (0, 1);
-        } else if ( glConfig.driverType == VULKAN ) {
-            vk_d.viewport.minDepth = 0.0f;
-            vk_d.viewport.maxDepth = 1.0f;
-        }
+                                vk_d.viewport.minDepth = 0.0f;
+                vk_d.viewport.maxDepth = 1.0f;
+            
 		
 	}
 
@@ -505,7 +346,6 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	// add light flares on lights that aren't obscured
 	RB_RenderFlares();
 }
-
 
 /*
 ============================================================================
@@ -560,27 +400,7 @@ void RE_StretchRaw (int x, int y, int w, int h, int cols, int rows, const byte *
 
 void RE_UploadCinematic (int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty) {
 
-    if (glConfig.driverType == OPENGL) {
-        GL_Bind( tr.scratchImage[client] );
-        
-        // if the scratchImage isn't in the format we want, specify it as a new texture
-        if ( cols != tr.scratchImage[client]->width || rows != tr.scratchImage[client]->height ) {
-            tr.scratchImage[client]->width = tr.scratchImage[client]->uploadWidth = cols;
-            tr.scratchImage[client]->height = tr.scratchImage[client]->uploadHeight = rows;
-            qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, cols, rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, data );
-            qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-            qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-            qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-            qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
-        } else {
-            if (dirty) {
-                // otherwise, just subimage upload it so that drivers can tell we are going to be changing
-                // it and don't try and do a texture compression
-                qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RGBA, GL_UNSIGNED_BYTE, data );
-            }
-        }
-    } else if (glConfig.driverType == VULKAN) {
-        if ( cols != tr.scratchImage[client]->width || rows != tr.scratchImage[client]->height ) {
+                if ( cols != tr.scratchImage[client]->width || rows != tr.scratchImage[client]->height ) {
             tr.scratchImage[client]->width = tr.scratchImage[client]->uploadWidth = cols;
             tr.scratchImage[client]->height = tr.scratchImage[client]->uploadHeight = rows;
             
@@ -588,24 +408,23 @@ void RE_UploadCinematic (int w, int h, int cols, int rows, const byte *data, int
             VK_DestroyImage(image);
             
             VK_CreateImage(image, cols, rows, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
-			VK_UploadMipImageData(image, cols, rows, data, 4, 0); // rows wise
+    		VK_UploadMipImageData(image, cols, rows, data, 4, 0); // rows wise
             VK_CreateSampler(image, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
             
             VK_AddSampler(&image->descriptor_set, 0, VK_SHADER_STAGE_FRAGMENT_BIT);
             VK_SetSampler(&image->descriptor_set, 0, VK_SHADER_STAGE_FRAGMENT_BIT, image->sampler, image->view);
             VK_FinishDescriptor(&image->descriptor_set);
-
-			VK_SetSamplerPosition(&vk_d.imageDescriptor, 0, VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS, image->sampler, image->view, tr.scratchImage[client]->index);
-			VK_UpdateDescriptorSet(&vk_d.imageDescriptor);
+    
+    		VK_SetSamplerPosition(&vk_d.imageDescriptor, 0, VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS, image->sampler, image->view, tr.scratchImage[client]->index);
+    		VK_UpdateDescriptorSet(&vk_d.imageDescriptor);
         }
         else {
             if (dirty) {
-				VK_UploadMipImageData(&vk_d.images[tr.scratchImage[client]->index], cols, rows, data, 4, 0);
+    			VK_UploadMipImageData(&vk_d.images[tr.scratchImage[client]->index], cols, rows, data, 4, 0);
             }
         }
-    }
+    
 }
-
 
 /*
 =============
@@ -701,7 +520,6 @@ const void *RB_StretchPic ( const void *data ) {
 	return (const void *)(cmd + 1);
 }
 
-
 /*
 =============
 RB_DrawSurfs
@@ -729,7 +547,6 @@ const void	*RB_DrawSurfs( const void *data ) {
 	return (const void *)(cmd + 1);
 }
 
-
 /*
 =============
 RB_DrawBuffer
@@ -741,85 +558,15 @@ const void	*RB_DrawBuffer( const void *data ) {
 
 	cmd = (const drawBufferCommand_t *)data;
 
-    if (glConfig.driverType == OPENGL) {
-        qglDrawBuffer( cmd->buffer );
-
-        // clear screen for debugging
-        if ( r_clear->integer ) {
-            qglClearColor( 1, 0, 0.5, 1 );
-            qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-        }
-    } else if (glConfig.driverType == VULKAN) {
-        VK_BeginFrame();
-		VK_BeginRenderClear();
+                VK_BeginFrame();
+    	VK_BeginRenderClear();
         if ( r_clear->integer ) {
             VK_ClearAttachments(qfalse, qfalse, qtrue, (vec4_t){1, 0, 0.5, 1});
         }
-    }
+    
 
 	return (const void *)(cmd + 1);
 }
-
-/*
-===============
-RB_ShowImages
-
-Draw all the images to the screen, on top of whatever
-was there.  This is used to test for texture thrashing.
-
-Also called by RE_EndRegistration
-===============
-*/
-void RB_ShowImages( void ) {
-	int		i;
-	image_t	*image;
-	float	x, y, w, h;
-	int		start, end;
-
-	if ( !backEnd.projection2D ) {
-		tr_api.RB_Set2D();
-	}
-
-	qglClear( GL_COLOR_BUFFER_BIT );
-
-	qglFinish();
-
-	start = ri.Milliseconds();
-
-	for ( i=0 ; i<tr.numImages ; i++ ) {
-		image = tr.images[i];
-
-		w = glConfig.vidWidth / 20;
-		h = glConfig.vidHeight / 15;
-		x = i % 20 * w;
-		y = i / 20 * h;
-
-		// show in proportional size in mode 2
-		if ( r_showImages->integer == 2 ) {
-			w *= image->uploadWidth / 512.0f;
-			h *= image->uploadHeight / 512.0f;
-		}
-
-		GL_Bind( image );
-		qglBegin (GL_QUADS);
-		qglTexCoord2f( 0, 0 );
-		qglVertex2f( x, y );
-		qglTexCoord2f( 1, 0 );
-		qglVertex2f( x + w, y );
-		qglTexCoord2f( 1, 1 );
-		qglVertex2f( x + w, y + h );
-		qglTexCoord2f( 0, 1 );
-		qglVertex2f( x, y + h );
-		qglEnd();
-	}
-
-	qglFinish();
-
-	end = ri.Milliseconds();
-	ri.Printf( PRINT_ALL, "%i msec to draw all images\n", end - start );
-
-}
-
 
 /*
 =============
@@ -835,43 +582,11 @@ const void	*RB_SwapBuffers( const void *data ) {
 		RB_EndSurface();
 	}
 
-	// texture swapping test
-	if ( r_showImages->integer ) {
-		RB_ShowImages();
-	}
-
 	cmd = (const swapBuffersCommand_t *)data;
 
-	// we measure overdraw by reading back the stencil buffer and
-	// counting up the number of increments that have happened
-	if ( r_measureOverdraw->integer ) {
-		int i;
-		long sum = 0;
-		unsigned char *stencilReadback;
-
-		stencilReadback = ri.Hunk_AllocateTempMemory( glConfig.vidWidth * glConfig.vidHeight );
-		qglReadPixels( 0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, stencilReadback );
-
-		for ( i = 0; i < glConfig.vidWidth * glConfig.vidHeight; i++ ) {
-			sum += stencilReadback[i];
-		}
-
-		backEnd.pc.c_overDraw += sum;
-		ri.Hunk_FreeTempMemory( stencilReadback );
-	}
-
-    if (glConfig.driverType == OPENGL) {
-        if ( !glState.finishCalled ) {
-            qglFinish();
-        }
-
-        GLimp_LogComment( "***************** RB_SwapBuffers *****************\n\n\n" );
-
-        GLimp_EndFrame();
-    } else if (glConfig.driverType == VULKAN) {
-        VK_EndRender();
+                VK_EndRender();
         VK_EndFrame();
-    }
+    
 
 	backEnd.projection2D = qfalse;
 
@@ -928,7 +643,6 @@ void RB_ExecuteRenderCommands( const void *data ) {
 	}
 
 }
-
 
 /*
 ================

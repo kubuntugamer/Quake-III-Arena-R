@@ -1612,29 +1612,10 @@ R_DebugPolygon
 ================
 */
 void R_DebugPolygon( int color, int numPoints, float *points ) {
-	tr_api.State( GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE );
-
-	// draw solid shade
-
-	qglColor3f( color&1, (color>>1)&1, (color>>2)&1 );
-	qglBegin( GL_POLYGON );
-	for (int i = 0 ; i < numPoints ; i++ ) {
-		qglVertex3fv( points + i * 3 );
-	}
-	qglEnd();
-
-	// draw wireframe outline
-	tr_api.State( GLS_POLYMODE_LINE | GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE );
-	qglDepthRange( 0, 0 );
-	qglColor3f( 1, 1, 1 );
-	qglBegin( GL_POLYGON );
-	for (int i = 0 ; i < numPoints ; i++ ) {
-		qglVertex3fv( points + i * 3 );
-	}
-	qglEnd();
-	qglDepthRange( 0, 1 );
-
-	
+	// GL immediate-mode debug visualization removed with the OpenGL backend
+	(void)color;
+	(void)numPoints;
+	(void)points;
 }
 
 /*
@@ -1645,16 +1626,9 @@ Visualization aid for movement clipping debugging
 ====================
 */
 void R_DebugGraphics( void ) {
-	if ( !r_debugSurface->integer ) {
-		return;
-	}
-
-	// the render thread can't make callbacks to the main thread
-	R_SyncRenderThread();
-
-	GL_Bind( tr.whiteImage);
-	tr_api.Cull( CT_FRONT_SIDED );
-	ri.CM_DrawDebugSurface( R_DebugPolygon );
+	// GL immediate-mode movement-clipping visualization removed with OpenGL;
+	// R_DebugPolygon is a no-op, so there is nothing left to drive here.
+	return;
 }
 
 

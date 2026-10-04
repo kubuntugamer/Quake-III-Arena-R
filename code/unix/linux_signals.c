@@ -25,6 +25,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../qcommon/qcommon.h"
 #ifndef DEDICATED
 #include "../renderer/tr_local.h"
+#include "linux_local.h"
 #endif
 
 static qboolean signalcaught = qfalse;;
@@ -42,7 +43,7 @@ static void signal_handler(int sig) // bk010104 - replace this... (NOTE TTimo hu
   signalcaught = qtrue;
   printf("Received signal %d, exiting...\n", sig);
 #ifndef DEDICATED
-  GLimp_Shutdown(); // bk010104 - shouldn't this be CL_Shutdown
+  VKimp_Shutdown();
 #endif
   Sys_Exit(0); // bk010104 - abstraction NOTE TTimo send a 0 to avoid DOUBLE SIGNAL FAULT
 }

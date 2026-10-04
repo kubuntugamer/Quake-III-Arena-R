@@ -98,15 +98,6 @@ typedef struct {
     int    minimize, maximize, mipmap;
 } vkTextureMode_t;
 
-textureMode_t modes[] = {
-	{"GL_NEAREST", GL_NEAREST, GL_NEAREST},
-	{"GL_LINEAR", GL_LINEAR, GL_LINEAR},
-	{"GL_NEAREST_MIPMAP_NEAREST", GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST},
-	{"GL_LINEAR_MIPMAP_NEAREST", GL_LINEAR_MIPMAP_NEAREST, GL_LINEAR},
-	{"GL_NEAREST_MIPMAP_LINEAR", GL_NEAREST_MIPMAP_LINEAR, GL_NEAREST},
-	{"GL_LINEAR_MIPMAP_LINEAR", GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR}
-};
-
 vkTextureMode_t vkModes[] = {
     {"GL_NEAREST", VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST},
     {"GL_LINEAR", VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST},
@@ -139,46 +130,11 @@ static long generateHashValue(const char *fname) {
 	return hash;
 }
 
-/*
-===============
-GL_TextureMode
-===============
-*/
-void GL_TextureMode(const char *string) {
-	int i;
-
-	for (i = 0; i < 6; i++) {
-		if (!Q_stricmp(modes[i].name, string)) {
-			break;
-		}
-	}
-
-	if (i == 6) {
-		ri.Printf(PRINT_ALL, "bad filter name\n");
-		return;
-	}
-
-	gl_filter_min = modes[i].minimize;
-	gl_filter_max = modes[i].maximize;
-
-	// change all the existing mipmap texture objects
-	for (i = 0; i < tr.numImages; i++) {
-		image_t* glt = tr.images[i];
-		if (glt->mipmap) {
-			GL_Bind(glt);
-			qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_min);
-			qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-		}
-	}
-
-	
-}
-
 void VK_TextureMode(const char *string) {
     int i;
     
     for (i = 0; i < 6; i++) {
-        if (!Q_stricmp(modes[i].name, string)) {
+        if (!Q_stricmp(vkModes[i].name, string)) {
             break;
         }
     }
@@ -411,7 +367,6 @@ void R_LightScaleTexture(unsigned *in, int inwidth, int inheight, qboolean only_
 	}
 }
 
-
 /*
 ================
 R_MipMap2
@@ -514,7 +469,6 @@ static void R_MipMap(byte *in, int width, int height) {
 		}
 	}
 }
-
 
 /*
 ==================
@@ -689,53 +643,6 @@ static struct Image_Upload_Data generate_image_upload_data(const byte* data, int
 	return upload_data;
 }
 
-static int upload_gl_image(const struct Image_Upload_Data *upload_data, int texture_address_mode) {
-	int w = upload_data->base_level_width;
-	int h = upload_data->base_level_height;
-
-	qboolean has_alpha = qfalse;
-	for (int i = 0; i < w * h; i++) {
-		if (upload_data->buffer[i * 4 + 3] != 255) {
-			has_alpha = qtrue;
-			break;
-		}
-	}
-	int internal_format = GL_RGBA8;
-	if (glConfig.textureCompression && !has_alpha) {
-		internal_format = GL_RGB4_S3TC;
-	}
-	else if (r_texturebits->integer <= 16) {
-		internal_format = has_alpha ? GL_RGBA4 : GL_RGB5;
-	}
-
-	byte* buffer = upload_data->buffer;
-	for (int i = 0; i < upload_data->mip_levels; i++) {
-		qglTexImage2D(GL_TEXTURE_2D, i, internal_format, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
-		buffer += w * h * 4;
-
-		w >>= 1;
-		if (w < 1) w = 1;
-
-		h >>= 1;
-		if (h < 1) h = 1;
-	}
-
-	if (upload_data->mip_levels > 1) {
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_min);
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-	}
-	else {
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	}
-
-	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, texture_address_mode);
-	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, texture_address_mode);
-
-	GL_CheckErrors();
-	return internal_format;
-}
-
 // VULKAN
 static vkimage_t upload_vk_image(const struct Image_Upload_Data* upload_data, int texture_address_mode) {
 	int w = upload_data->base_level_width;
@@ -852,35 +759,22 @@ image_t *R_CreateImage(const char *name, const byte *pic, int width, int height,
 
 	// Create corresponding GPU resource.
 	qboolean isLightmap = (strncmp(name, "*lightmap", 9) == 0);
-	if (glConfig.driverType == OPENGL) {
-		GL_SelectTexture(isLightmap ? 1 : 0);
-		GL_Bind(image);
-	}
-
+	
 	struct Image_Upload_Data upload_data = generate_image_upload_data(pic, width, height, mipmap, allowPicmip);
 
-	if (glConfig.driverType == OPENGL) {
-		image->internalFormat = upload_gl_image(&upload_data, glWrapClampMode );
-
-		if (isLightmap) {
-			GL_SelectTexture(0);
-		}
-	}
-	else if (glConfig.driverType == VULKAN) {
-		vk_d.images[image->index] = upload_vk_image(&upload_data, glWrapClampMode);
+				vk_d.images[image->index] = upload_vk_image(&upload_data, glWrapClampMode);
 		
 		VK_SetSamplerPosition(&vk_d.imageDescriptor, 0, VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS, vk_d.images[image->index].sampler, vk_d.images[image->index].view, image->index);
 		VK_SetUpdateSize(&vk_d.imageDescriptor, 0, VK_GLOBAL_IMAGEARRAY_SHADER_STAGE_FLAGS, image->index+1);
 		vk_d.imageDescriptor.needsUpdate = qtrue;
 		//VK_UpdateDescriptorSet(&vk_d.imageDescriptor);
-	}
+	
 	
 
 	
 	ri.Hunk_FreeTempMemory(upload_data.buffer);
 	return image;
 }
-
 
 /*
 =========================================================
@@ -999,7 +893,6 @@ static void LoadBMP(const char *name, byte **pic, int *width, int *height)
 	bmpRGBA = (byte*)ri.Malloc(numPixels * 4);
 	*pic = bmpRGBA;
 
-
 	for (row = rows - 1; row >= 0; row--)
 	{
 		pixbuf = bmpRGBA + row * columns * 4;
@@ -1058,7 +951,6 @@ static void LoadBMP(const char *name, byte **pic, int *width, int *height)
 
 }
 
-
 /*
 =================================================================
 
@@ -1066,7 +958,6 @@ PCX LOADING
 
 =================================================================
 */
-
 
 /*
 ==============
@@ -1161,7 +1052,6 @@ static void LoadPCX(const char *filename, byte **pic, byte **palette, int *width
 
 	ri.FS_FreeFile(pcx);
 }
-
 
 /*
 ==============
@@ -1720,7 +1610,6 @@ image_t	*R_FindImageFile(const char *name, qboolean mipmap, qboolean allowPicmip
 	return image;
 }
 
-
 /*
 ================
 R_CreateDlightImage
@@ -1754,7 +1643,6 @@ static void R_CreateDlightImage(void) {
 	}
 	tr.dlightImage = R_CreateImage("*dlight", (byte *)data, DLIGHT_SIZE, DLIGHT_SIZE, qfalse, qfalse, GL_CLAMP);
 }
-
 
 /*
 =================
@@ -1850,10 +1738,7 @@ static void R_CreateFogImage(void) {
 	borderColor[2] = 1.0;
 	borderColor[3] = 1;
 
-	if (glConfig.driverType == OPENGL) {
-		qglTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 	}
-}
 
 /*
 ==================
@@ -1919,7 +1804,6 @@ void R_CreateBuiltinImages(void) {
 
 	tr.identityLightImage = R_CreateImage("*identityLight", (byte *)data, 8, 8, qfalse, qfalse, GL_REPEAT);
 
-
 	for (x = 0; x < 32; x++) {
 		// scratchimage is usually used for cinematic drawing
 		tr.scratchImage[x] = R_CreateImage("*scratch", (byte *)data, DEFAULT_SIZE, DEFAULT_SIZE, qfalse, qtrue, GL_CLAMP);
@@ -1928,7 +1812,6 @@ void R_CreateBuiltinImages(void) {
 	R_CreateDlightImage();
 	R_CreateFogImage();
 }
-
 
 /*
 ===============
@@ -1971,7 +1854,6 @@ void R_SetColorMappings(void) {
 	tr.identityLight = 1.0f / (1 << tr.overbrightBits);
 	tr.identityLightByte = 255 * tr.identityLight;
 
-
 	if (r_intensity->value <= 1) {
 		ri.Cvar_Set("r_intensity", "1");
 	}
@@ -2012,10 +1894,9 @@ void R_SetColorMappings(void) {
 		s_intensitytable[i] = j;
 	}
 
-	if (glConfig.deviceSupportsGamma)
-	{
-		GLimp_SetGamma(s_gammatable, s_gammatable, s_gammatable);
-	}
+	// NOTE: hardware gamma ramp upload (GLimp_SetGamma) removed with OpenGL;
+	// glConfig.deviceSupportsGamma stays false and R_GammaCorrect() still
+	// applies the software tables where needed (screenshots, lightmaps).
 }
 
 /*
@@ -2040,11 +1921,7 @@ R_DeleteTextures
 */
 void R_DeleteTextures(void) {
 	for (int i = 0; i < tr.numImages; i++) {
-		if (glConfig.driverType == OPENGL) qglDeleteTextures(1, &tr.images[i]->texnum);
-		else if (glConfig.driverType == VULKAN) {
-			VK_DestroyImage(&vk_d.images[tr.images[i]->index]);
-		}
-	}
+			}
 	Com_Memset(tr.images, 0, sizeof(tr.images));
 
 	tr.numImages = 0;
@@ -2055,15 +1932,7 @@ void R_DeleteTextures(void) {
 
 	Com_Memset(glState.currenttextures, 0, sizeof(glState.currenttextures));
 
-	if (glConfig.driverType == OPENGL) {
-		if (qglBindTexture) {
-			GL_SelectTexture(1);
-			qglBindTexture(GL_TEXTURE_2D, 0);
-			GL_SelectTexture(0);
-			qglBindTexture(GL_TEXTURE_2D, 0);
-		}
 	}
-}
 
 /*
 ============================================================================
@@ -2104,7 +1973,6 @@ static char *CommaParse(char **data_p) {
 			}
 			data++;
 		}
-
 
 		c = *data;
 
@@ -2180,7 +2048,6 @@ static char *CommaParse(char **data_p) {
 	return com_token;
 }
 
-
 /*
 ===============
 RE_RegisterSkin
@@ -2204,7 +2071,6 @@ qhandle_t RE_RegisterSkin(const char *name) {
 		Com_Printf("Skin name exceeds MAX_QPATH\n");
 		return 0;
 	}
-
 
 	// see if the skin is already loaded
 	for (hSkin = 1; hSkin < tr.numSkins; hSkin++) {
@@ -2276,7 +2142,6 @@ qhandle_t RE_RegisterSkin(const char *name) {
 
 	ri.FS_FreeFile(text);
 
-
 	// never let a skin have 0 shaders
 	if (skin->numSurfaces == 0) {
 		return 0;		// use default skin
@@ -2284,7 +2149,6 @@ qhandle_t RE_RegisterSkin(const char *name) {
 
 	return hSkin;
 }
-
 
 /*
 ===============
