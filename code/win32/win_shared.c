@@ -122,3 +122,14 @@ int Sys_UringHandleRead( void *file, void *buf, int len ) {
 	(void)file; (void)buf; (void)len;
 	return 0;
 }
+
+/* stage 2 async stubs */
+int Sys_UringReadAsync( void *file, void *buf, int len, long off, unsigned long long tag ) {
+	(void)file; (void)buf; (void)len; (void)off; (void)tag; return 0;
+}
+int Sys_UringCollect( int block, unsigned long long *tags, long *results, int maxout ) {
+	(void)block; (void)tags; (void)results; (void)maxout; return 0;
+}
+int Sys_UringHandleReadAsync( void *file, void *buf, int len ) {
+	(void)file; (void)buf; (void)len; return 0;
+}

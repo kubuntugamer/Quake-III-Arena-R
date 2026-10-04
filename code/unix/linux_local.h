@@ -47,6 +47,10 @@ void Sys_GameModeEnd( void );
 
 /* io_uring file-read backend (linux_uring.c); nonzero = fully handled */
 int Sys_UringHandleRead( void *file, void *buf, int len );
+/* Stage 2 async submit/collect backend */
+int Sys_UringReadAsync( void *file, void *buf, int len, long off, unsigned long long tag );
+int Sys_UringCollect( int block, unsigned long long *tags, long *results, int maxout );
+int Sys_UringHandleReadAsync( void *file, void *buf, int len );
 
 // bk001130 - win32
 // void IN_JoystickCommands (void);

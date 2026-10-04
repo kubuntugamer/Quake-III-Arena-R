@@ -218,3 +218,167 @@ int Sys_UringHandleRead(void *vf, void *buf, int len) {
 	}
 	return 1;
 }
+
+/* ------------------------------------------------------------------
+   Stage 2: asynchronous submit/collect batch streaming
+   ------------------------------------------------------------------ */
+static unsigned async_inflight;
+static unsigned long long async_next_tag = 1;
+
+/*
+================
+Sys_UringReadAsync
+Non blocking: queue one pread of *len* bytes from the open file *vf*
+at byte offset *off*, landing in *buf*. Returns 1 on successful
+submission, 0 when the ring is unavailable, busy, or any setup step
+fails. The completion is later reported through Sys_UringCollect.
+================
+*/
+int Sys_UringReadAsync(void *vf, void *buf, int len, long off, unsigned long long tag) {
+	FILE *f = (FILE *)vf;
+	int fd;
+	unsigned tail, index;
+	struct io_uring_sqe *sqe;
+
+	if (len <= 0) {
+		return 0;
+	}
+	if (!Sys_UringInit()) {
+		return 0;
+	}
+	if (async_inflight >= uring.sq_entries) {
+		return 0; /* too many in flight; caller drains first */
+	}
+	fd = fileno(f);
+	if (fd < 0) {
+		return 0;
+	}
+
+	tail = uring_load_acquire(uring.sq_tail);
+	index = tail & *uring.sq_mask;
+	sqe = &uring.sqes[index];
+	memset(sqe, 0, sizeof(*sqe));
+	sqe->opcode = IORING_OP_READ;
+	sqe->fd = fd;
+	sqe->off = (unsigned long long)off;
+	sqe->addr = (unsigned long long)(uintptr_t)buf;
+	sqe->len = (unsigned)len;
+	sqe->user_data = tag;
+	uring.sq_array[index] = index;
+	uring_store_release(uring.sq_tail, tail + 1);
+
+	if (uring_enter(1, 0) < 0) {
+		return 0;
+	}
+	async_inflight++;
+	return 1;
+}
+
+/*
+================
+Sys_UringCollect
+Reap completed async reads. When *block* is nonzero, wait for at
+least one completion first; otherwise drain whatever is available
+without blocking. Fills *tags* (max *maxout*) with caller tags and
+*results* with byte counts (or a negative errno). Returns the number
+of completions collected. In-flight bookkeeping is updated accordingly.
+================
+*/
+int Sys_UringCollect(int block, unsigned long long *tags, long *results, int maxout) {
+	unsigned head, avail;
+	int collected = 0;
+
+	if (!Sys_UringInit()) {
+		return 0;
+	}
+	if (uring_enter(0, block) < 0) {
+		return 0;
+	}
+	head = uring_load_acquire(uring.cq_head);
+	avail = uring_load_acquire(uring.cq_tail) - head;
+	while (collected < maxout && avail > 0) {
+		struct io_uring_cqe *cqe = &uring.cqes[head & *uring.cq_mask];
+		if (tags) {
+			tags[collected] = (unsigned long long)cqe->user_data;
+		}
+		if (results) {
+			results[collected] = cqe->res;
+		}
+		collected++;
+		head++;
+		avail--;
+		if (async_inflight > 0) {
+			async_inflight--;
+		}
+	}
+	uring_store_release(uring.cq_head, head);
+	return collected;
+}
+
+/*
+================
+Sys_UringHandleReadAsync
+Exact-length read routed through the async submit/collect substrate.
+On success the stdio position advances by *len* and 1 is returned.
+On any shortfall/error the file position is restored and 0 is
+returned so the caller retries via the legacy fread loop.
+================
+*/
+int Sys_UringHandleReadAsync(void *vf, void *buf, int len) {
+	FILE *f = (FILE *)vf;
+	char *p;
+	long off;
+	unsigned long long tag;
+	long total;
+	int fd;
+
+	if (len <= 0) {
+		return 1;
+	}
+	if (!Sys_UringInit()) {
+		return 0;
+	}
+	fd = fileno(f);
+	if (fd < 0) {
+		return 0;
+	}
+	off = ftello(f);
+	if (off < 0) {
+		return 0;
+	}
+
+	p = (char *)buf;
+	total = 0;
+	tag = async_next_tag++;
+	if (!Sys_UringReadAsync(vf, buf, len, off, tag)) {
+		return 0; /* ring busy or unavailable -> fread fallback */
+	}
+
+	/* drain completions until our tag arrives (other work-tag drains
+	   from a shared ring are rare in Q3's single read thread) */
+	for (;;) {
+		unsigned long long rtags[URING_QD];
+		long rres[URING_QD];
+		int got = Sys_UringCollect(1, rtags, rres, URING_QD);
+		int i;
+
+		if (got <= 0) {
+			return 0;
+		}
+		for (i = 0; i < got; i++) {
+			if (rtags[i] == tag) {
+				if (rres[i] != len) {
+					/* shortfall or error -> restore position, fallback */
+					fseeko(f, off, SEEK_SET);
+					return 0;
+				}
+				total = rres[i];
+				if (fseeko(f, off + total, SEEK_SET) != 0) {
+					return 0;
+				}
+				return 1;
+			}
+		}
+		/* our tag not in this drain; loop to wait for the rest */
+	}
+}

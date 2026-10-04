@@ -1253,8 +1253,11 @@ int FS_Read2( void *buffer, int len, fileHandle_t f ) {
 }
 
 int Sys_UringHandleRead( void *file, void *buf, int len );
+int Sys_UringHandleReadAsync( void *file, void *buf, int len );
 
 static qboolean fs_uringAnnounced = qfalse;
+static qboolean fs_uringAsyncAnnounced = qfalse;
+static cvar_t *fs_useUringAsync;
 
 int FS_Read( void *buffer, int len, fileHandle_t f ) {
 	int		block, remaining;
@@ -1274,7 +1277,16 @@ int FS_Read( void *buffer, int len, fileHandle_t f ) {
 	fs_readCount += len;
 
 	if (fsh[f].zipFile == qfalse) {
-		if ( fs_useUring && fs_useUring->integer ) {
+		if ( fs_useUringAsync && fs_useUringAsync->integer ) {
+			if ( Sys_UringHandleReadAsync( fsh[f].handleFiles.file.o, buf, len ) ) {
+				if ( !fs_uringAsyncAnnounced ) {
+					fs_uringAsyncAnnounced = qtrue;
+					Com_DPrintf( "FS_Read: serving file reads via io_uring (async)\n" );
+				}
+				return len;
+			}
+			/* async ring unavailable or short read: fall through */
+		} else if ( fs_useUring && fs_useUring->integer ) {
 			if ( Sys_UringHandleRead( fsh[f].handleFiles.file.o, buf, len ) ) {
 				if ( !fs_uringAnnounced ) {
 					fs_uringAnnounced = qtrue;
@@ -2760,6 +2772,7 @@ static void FS_Startup( const char *gameName ) {
 
 	fs_debug = Cvar_Get( "fs_debug", "0", 0 );
 	fs_useUring = Cvar_Get( "fs_useUring", "0", CVAR_ARCHIVE );
+	fs_useUringAsync = Cvar_Get( "fs_useUringAsync", "0", CVAR_ARCHIVE );
 	fs_copyfiles = Cvar_Get( "fs_copyfiles", "0", CVAR_INIT );
 	fs_cdpath = Cvar_Get ("fs_cdpath", Sys_DefaultCDPath(), CVAR_INIT );
 	fs_basepath = Cvar_Get ("fs_basepath", Sys_DefaultInstallPath(), CVAR_INIT );
