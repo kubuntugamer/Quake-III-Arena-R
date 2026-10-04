@@ -1,8 +1,8 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : enable
-#pragma optionNV (unroll all)
+#pragma optionEXT (unroll all)
 #include "../constants.h"
 #include "defines.glsl"
 #include "rt_helper.glsl"
@@ -33,25 +33,25 @@ vec3 directIllumination(){
 
 	uvec4 utemp;
 	bool temporal_accum = true;
-	//utemp = imageLoad(objectGBuffer, ivec2(gl_LaunchIDNV.xy));
+	//utemp = imageLoad(objectGBuffer, ivec2(gl_LaunchIDEXT.xy));
 	// material = utemp.x;
 	// cluster = utemp.y;
-	transparent = imageLoad(transparentGBuffer, ivec2(gl_LaunchIDNV.xy));
-	material = uint(imageLoad(viewGBuffer, ivec2(gl_LaunchIDNV.xy)).w);
+	transparent = imageLoad(transparentGBuffer, ivec2(gl_LaunchIDEXT.xy));
+	material = uint(imageLoad(viewGBuffer, ivec2(gl_LaunchIDEXT.xy)).w);
 	// if(isWater(material)){
-	// 	vec4 reflectAlbedo = imageLoad(reflectionGBuffer, ivec2(gl_LaunchIDNV.xy));
+	// 	vec4 reflectAlbedo = imageLoad(reflectionGBuffer, ivec2(gl_LaunchIDEXT.xy));
 	// 	return alpha_blend( transparent, reflectAlbedo).xyz;
 	// }
-	primary_albedo = imageLoad(albedoGBuffer, ivec2(gl_LaunchIDNV.xy));
+	primary_albedo = imageLoad(albedoGBuffer, ivec2(gl_LaunchIDEXT.xy));
 	// if(isGlass(material)){
-	// 	primary_albedo	= imageLoad(reflectionGBuffer, ivec2(gl_LaunchIDNV.xy));
+	// 	primary_albedo	= imageLoad(reflectionGBuffer, ivec2(gl_LaunchIDEXT.xy));
 	// }
-	normal = imageLoad(normalGBuffer, ivec2(gl_LaunchIDNV.xy)).xyz;
-	pos = imageLoad(posGBuffer, ivec2(gl_LaunchIDNV.xy)).xyz;
-	cluster = uint(imageLoad(posGBuffer, ivec2(gl_LaunchIDNV.xy)).w);
+	normal = imageLoad(normalGBuffer, ivec2(gl_LaunchIDEXT.xy)).xyz;
+	pos = imageLoad(posGBuffer, ivec2(gl_LaunchIDEXT.xy)).xyz;
+	cluster = uint(imageLoad(posGBuffer, ivec2(gl_LaunchIDEXT.xy)).w);
 
 	if (isSky(material)) {
-		imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDNV.xy), vec4(1,1,1,0));
+		imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDEXT.xy), vec4(1,1,1,0));
 		return alpha_blend( transparent, vec4(primary_albedo.xyz,1)).xyz;
 	}
 	
@@ -64,16 +64,16 @@ vec3 directIllumination(){
 		//shadeColor += primary_albedo.rgb * 0.25f;
 	}
 	shadeColor = alpha_blend( transparent, vec4(shadeColor.rgb,1) ).xyz;
-	imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDNV.xy), vec4( directIllumination ,1));
+	imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDEXT.xy), vec4( directIllumination ,1));
 	if (isLight(material)) {
-		//imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDNV.xy), vec4(vec3(0.3),1));
+		//imageStore(IMG_GBUFFER_DIRECT_ILLUMINATION, ivec2(gl_LaunchIDEXT.xy), vec4(vec3(0.3),1));
 	}
 	return shadeColor;
 }
 
 void main() 
 {
-	ivec2 ipos = ivec2(gl_LaunchIDNV);
+	ivec2 ipos = ivec2(gl_LaunchIDEXT);
 	// rng_seed = (ubo.frameIndex & 1) == 0
 	// 	? imageLoad(rngASVGF_A, ipos).r
 	// 	: imageLoad(rngASVGF_B, ipos).r;
@@ -81,14 +81,14 @@ void main()
 
 	vec3 color = directIllumination();
 	// if(ubo.accumulate == 1) {
-	// 	vec3 outPrev = imageLoad(imageAccumulationPrev, ivec2(gl_LaunchIDNV.xy)).xyz;
+	// 	vec3 outPrev = imageLoad(imageAccumulationPrev, ivec2(gl_LaunchIDEXT.xy)).xyz;
 	// 	color = (color + outPrev);
-	// 	imageStore(imageAccumulation, ivec2(gl_LaunchIDNV.xy), vec4( color ,1));
+	// 	imageStore(imageAccumulation, ivec2(gl_LaunchIDEXT.xy), vec4( color ,1));
 	// 	color /= float(ubo.numSamples);
 	// } else{
-	// 	imageStore(imageAccumulation, ivec2(gl_LaunchIDNV.xy), vec4( color ,1));	
+	// 	imageStore(imageAccumulation, ivec2(gl_LaunchIDEXT.xy), vec4( color ,1));	
 	// }
-	// imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4( color ,1));
+	// imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4( color ,1));
 
 }
 

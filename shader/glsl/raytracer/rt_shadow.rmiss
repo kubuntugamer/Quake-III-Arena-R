@@ -1,8 +1,8 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 #include "defines.glsl"
-layout(location = PAYLOAD_SHADOW) rayPayloadInNV ShadowRayPayload rp;
+layout(location = PAYLOAD_SHADOW) rayPayloadInEXT ShadowRayPayload rp;
 
 void main()
 {

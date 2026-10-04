@@ -1,13 +1,16 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : enable
 #include "../constants.h"
 #include "defines.glsl"
 #include "globalTexture.glsl"
 #include "vertexData.glsl"
+layout(location = PAYLOAD_REFLECT) rayPayloadInEXT RayPayloadReflect rrp;
+#define REFLECT_PAYLOAD_EXTERNAL
 #include "traceRay.glsl"
-#include "rt_Helper.glsl"
+#include "reflectTrace.glsl"
+#include "rt_helper.glsl"
 
 vec3 reflect_point_vs_plane(vec3 plane_pt, vec3 plane_normal, vec3 point)
 {
@@ -19,14 +22,12 @@ float ray_distance_to_plane(vec3 plane_pt, vec3 plane_normal, vec3 ray_origin, v
 	return dot(plane_pt - ray_origin, plane_normal) / dot(ray_direction, plane_normal);
 }
 
-hitAttributeNV vec2 hitAttribute;
+hitAttributeEXT vec2 hitAttribute;
 
 layout(binding = BINDING_OFFSET_GLOBAL_UBO, set = 0) uniform global_ubo
 {
 	GlobalUbo ubo;
 };
-
-layout(location = PAYLOAD_REFLECT) rayPayloadInNV RayPayloadReflect rrp;
 
 #define PRIMARY_RAY_T_MAX (10000.0)
 Ray
@@ -55,7 +56,7 @@ void main()
 	rp.barycentric = hitAttribute;
   	rp.instanceID = gl_InstanceID;
 	rp.primitiveID = gl_PrimitiveID;
-	rp.hit_distance = gl_RayTmaxNV;
+	rp.hit_distance = gl_RayTmaxEXT;
 
 	HitPoint hp = getHitPoint(rp);
 	Triangle triangle = getTriangle(rp);
@@ -65,7 +66,7 @@ void main()
 	rrp.prevPos = getPrevPos(rp);
 	rrp.depth = depth;
 	rrp.object = vec4(rp.barycentric, uintBitsToFloat(rp.instanceID), uintBitsToFloat(rp.primitiveID));
-	rrp.hit_distance = gl_RayTmaxNV;
+	rrp.hit_distance = gl_RayTmaxEXT;
 	
 	//rrp.color += vec4(0.2, 0.2, 0.2, 1);
 
@@ -80,7 +81,7 @@ void main()
 			return;
 		}
 
-		vec3 originalDir = normalize(gl_WorldRayDirectionNV);
+		vec3 originalDir = normalize(gl_WorldRayDirectionEXT);
 		vec3 N = normalize(hp.normal);
 		float n1 = 1.5, n2 = 1.0, ndotr = dot(originalDir, N);  
 		if( ndotr > 0.0f ) {
@@ -112,7 +113,7 @@ void main()
 		// if texture (alpha) not see through enough then do not trace further
 	
 
-		vec3 originalDir = normalize(gl_WorldRayDirectionNV);
+		vec3 originalDir = normalize(gl_WorldRayDirectionEXT);
 		vec3 N = normalize(hp.normal);
 		float n1 = 1.3, n2 = 1.0, ndotr = dot(originalDir, N);  
 		if( ndotr > 0.0f ) {
@@ -153,7 +154,7 @@ void main()
 		tex.w = 0;
 		//if(any(lessThan(tex.rgb, vec3(0.15))) tex.rgb = vec3(0);
 		
-		vec3 originalDir = normalize(gl_WorldRayDirectionNV);
+		vec3 originalDir = normalize(gl_WorldRayDirectionEXT);
 		vec3 N = normalize(hp.normal);
 		vec4 albedo;
 		rrp.color = vec4(0);
@@ -177,7 +178,7 @@ void main()
 			return;
 		}
 
-		vec3 originalDir = normalize(gl_WorldRayDirectionNV);
+		vec3 originalDir = normalize(gl_WorldRayDirectionEXT);
 		vec3 N = normalize(hp.normal);
 		
 

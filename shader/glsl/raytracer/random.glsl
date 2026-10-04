@@ -6,7 +6,7 @@ uint rng_seed;
 uint
 get_rng_seed(uint frame_num)
 {
-	ivec2 ipos = ivec2(gl_LaunchIDNV);
+	ivec2 ipos = ivec2(gl_LaunchIDEXT);
 	uint rng_seed = 0;
 	uint frame_offset = frame_num / NUM_BLUE_NOISE_TEX;
 
@@ -23,7 +23,7 @@ get_rng(uint idx, uint frame_num)
 	p.z = (p.z + idx);
 	p &= uvec3(BLUE_NOISE_RES - 1, BLUE_NOISE_RES - 1, NUM_BLUE_NOISE_TEX - 1);
 
-	//p = uvec3((gl_LaunchIDNV.x +idx)%(BLUE_NOISE_RES - 1), (gl_LaunchIDNV.y +idx)%(BLUE_NOISE_RES - 1), frame_num % (NUM_BLUE_NOISE_TEX - 1));
+	//p = uvec3((gl_LaunchIDEXT.x +idx)%(BLUE_NOISE_RES - 1), (gl_LaunchIDEXT.y +idx)%(BLUE_NOISE_RES - 1), frame_num % (NUM_BLUE_NOISE_TEX - 1));
 	return min(texelFetch(blue_noise, ivec3(p), 0).r, 0.9999999999999);
 }
 

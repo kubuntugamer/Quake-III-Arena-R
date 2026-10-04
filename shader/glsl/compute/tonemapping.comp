@@ -5,7 +5,7 @@
 #include "../constants.h"
 #include "../raytracer/defines.glsl"
 #include "asvgf.glsl"
-#include "../raytracer/rt_Helper.glsl"
+#include "../raytracer/rt_helper.glsl"
 
 #include "../raytracer/gbuffer.glsl"
 #include "../raytracer/globalTexture.glsl"

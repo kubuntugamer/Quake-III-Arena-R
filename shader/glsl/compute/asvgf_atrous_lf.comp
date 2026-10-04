@@ -5,7 +5,7 @@
 #include "asvgf.glsl"
 #include "../raytracer/gbuffer.glsl"
 
-#include "../raytracer/rt_Helper.glsl"
+#include "../raytracer/rt_helper.glsl"
 
 layout(binding = BINDING_OFFSET_GLOBAL_UBO, set = 0) uniform global_ubo
 {

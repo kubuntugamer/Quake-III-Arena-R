@@ -1,5 +1,6 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
+#extension GL_NV_ray_tracing : enable  // for ignoreIntersectionNV (glslang>=16 lacks EXT spelling)
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_GOOGLE_include_directive : require
 #include "defines.glsl"
@@ -11,13 +12,13 @@ layout(binding = BINDING_OFFSET_GLOBAL_UBO, set = 0) uniform global_ubo
 	GlobalUbo ubo;
 };
 
-hitAttributeNV vec2 hitAttribute;
-layout(location = 0) rayPayloadInNV RayPayload rp;
+hitAttributeEXT vec2 hitAttribute;
+layout(location = 0) rayPayloadInEXT RayPayload rp;
 
 void blendSeeThrough(in HitPoint hp){
   // vec4 tex = getTextureWithLod(hp,0);
   // tex.xyz *= tex.w;
-  // if(rp.max_transparent_distance < gl_HitTNV)
+  // if(rp.max_transparent_distance < gl_HitTEXT)
   //   rp.transparent = alpha_blend_premultiplied(rp.transparent, tex);
   // else
   //   rp.transparent = alpha_blend_premultiplied(tex, rp.transparent);
@@ -25,7 +26,7 @@ void blendSeeThrough(in HitPoint hp){
     vec4 tex = getTextureWithLod(hp,0);
       tex.xyz *= tex.w;
     
-    if(rp.max_transparent_distance < gl_HitTNV)
+    if(rp.max_transparent_distance < gl_HitTEXT)
       rp.transparent = alpha_blend_premultiplied(rp.transparent, tex);
     else
       rp.transparent = alpha_blend_premultiplied(tex, rp.transparent);
@@ -45,13 +46,13 @@ void main()
   rpb.barycentric = hitAttribute;
   rpb.instanceID = gl_InstanceID;
 	rpb.primitiveID = gl_PrimitiveID;
-	rpb.hit_distance = gl_RayTmaxNV;
+	rpb.hit_distance = gl_RayTmaxEXT;
   uint material = get_material(rpb);
 
   HitPoint hp = getHitPoint(rpb);
   if(isSeeThrough(material)) {
     blendSeeThrough(hp);
-      rp.max_transparent_distance = gl_HitTNV;
+      rp.max_transparent_distance = gl_HitTEXT;
   }
   else if(isSeeThroughAdd(material)) {
     blendSeeThroughAdd(hp);
@@ -59,7 +60,7 @@ void main()
     vec4 tex = getTextureWithLod(hp,0);
     rp.transparent.xyzw += tex.xyzw;
     //rp.transparent.w = 1;
-      rp.max_transparent_distance = gl_HitTNV;
+      rp.max_transparent_distance = gl_HitTEXT;
   }
   //rp.transparent += tex;
   // if(is_see_through(rpb)) {

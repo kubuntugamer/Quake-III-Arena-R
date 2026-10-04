@@ -1,10 +1,10 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
-#pragma optionNV (unroll all)
+#pragma optionEXT (unroll all)
 #include "../constants.h"
 #include "asvgf.glsl"
 #include "../raytracer/gbuffer.glsl"
-#include "../raytracer/rt_Helper.glsl"
+#include "../raytracer/rt_helper.glsl"
 #include "../raytracer/defines.glsl"
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;

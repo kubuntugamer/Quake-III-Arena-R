@@ -1,8 +1,8 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : enable
-#pragma optionNV (unroll all)
+#pragma optionEXT (unroll all)
 #include "../constants.h"
 #include "defines.glsl"
 #include "rt_helper.glsl"
@@ -91,7 +91,7 @@ getPrimaryRay(vec2 pos_cs)
 
 	if(forward)
 	{
-		vec3 pos_ws    = imageLoad(posFwd, ivec2(gl_LaunchIDNV.xy) / GRAD_DWN).xyz; 
+		vec3 pos_ws    = imageLoad(posFwd, ivec2(gl_LaunchIDEXT.xy) / GRAD_DWN).xyz; 
 		ray.origin     = ubo.camPos.xyz;
 		ray.direction  = pos_ws - ray.origin;
 		float len      = length(ray.direction);
@@ -103,8 +103,8 @@ getPrimaryRay(vec2 pos_cs)
 
 vec4 getTextureLod(vec2 screen_coord_cs, Triangle triangle, HitPoint hp){
 	vec2 tex_coord = hp.uv0;
-	Ray ray_x = getRay(screen_coord_cs + vec2(2.0 / float(gl_LaunchSizeNV.x), 0));
-	Ray ray_y = getRay(screen_coord_cs - vec2(0, 2.0 / float(gl_LaunchSizeNV.y)));
+	Ray ray_x = getRay(screen_coord_cs + vec2(2.0 / float(gl_LaunchSizeEXT.x), 0));
+	Ray ray_y = getRay(screen_coord_cs - vec2(0, 2.0 / float(gl_LaunchSizeEXT.y)));
 
 	vec3 bary_x = compute_barycentric(triangle.pos, ray_x.origin, ray_x.direction);
 	vec3 bary_y = compute_barycentric(triangle.pos, ray_y.origin, ray_y.direction);
@@ -190,8 +190,8 @@ vec2 getScreenCoordinates(){
 	if(ubo.randomPixelOffset){
 		pixelOffset = vec2(get_rng(RNG_C(100), ubo.frameIndex), get_rng(RNG_C(100), ubo.frameIndex));
 	}
-	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + pixelOffset;
-	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
+	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + pixelOffset;
+	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
 	const vec2 screenCoordClipSpace  = inUV * 2.0 - 1.0;
 	return screenCoordClipSpace;
 }
@@ -216,7 +216,7 @@ void shootPrimaryRay(Ray ray, vec2 sccs){
 		hitData.object = vec4(-1, -1, uintBitsToFloat(uvec2(~0u)));
 	} else {
 		// if(!found_intersection(rp) && forward){
-		// 	vec4 obj = imageLoad(objectFwd, ivec2(gl_LaunchIDNV.xy) / GRAD_DWN);
+		// 	vec4 obj = imageLoad(objectFwd, ivec2(gl_LaunchIDEXT.xy) / GRAD_DWN);
 		// 	//if(obj.x != -1 && obj.y != -1 && floatBitsToUint(obj.z) != ~0u && floatBitsToUint(obj.w) != ~0u){
 		// 		rp.barycentric = obj.xy;
 		// 		rp.instanceID = floatBitsToUint(obj.z);
@@ -225,7 +225,7 @@ void shootPrimaryRay(Ray ray, vec2 sccs){
 		// 	//return;
 		// } else {
 		// 	if(forward) { /* gradient sample became occluded, mask out */
-		// 		imageStore(IMG_ASVGF_GRAD_SAMPLE_POS, ivec2(gl_LaunchIDNV.xy) / GRAD_DWN, uvec4(0));
+		// 		imageStore(IMG_ASVGF_GRAD_SAMPLE_POS, ivec2(gl_LaunchIDEXT.xy) / GRAD_DWN, uvec4(0));
 		// 	}
 		// 	forward = false;
 		// }
@@ -269,13 +269,13 @@ void shootPrimaryRay(Ray ray, vec2 sccs){
 
 	// uint n_encoded = encode_normal(hitData.normal.xyz);
 	// vec4 depth_normal = vec4(ndc.z, uintBitsToFloat(n_encoded), 0, 0);
-	// imageStore(IMG_GBUFFER_DEPTH_NORMAL, ivec2(gl_LaunchIDNV.xy), depth_normal);
+	// imageStore(IMG_GBUFFER_DEPTH_NORMAL, ivec2(gl_LaunchIDEXT.xy), depth_normal);
 
 }
 
 void main() 
 {
-	forward = is_gradient(ivec2(gl_LaunchIDNV.xy));
+	forward = is_gradient(ivec2(gl_LaunchIDEXT.xy));
 	forward = false;
 	vec2 sccs = getScreenCoordinates(); // screen coordinates in clip space
 	Ray ray = getPrimaryRay(sccs);
@@ -291,13 +291,13 @@ void main()
 	}
 	// store data in g buffer
 	
-	imageStore(objectGBuffer, ivec2(gl_LaunchIDNV.xy), hitData.object);
-	imageStore(albedoGBuffer, ivec2(gl_LaunchIDNV.xy), vec4(hitData.albedo));
-	imageStore(transparentGBuffer, ivec2(gl_LaunchIDNV.xy), vec4(hitData.transparent));
-	imageStore(normalGBuffer, ivec2(gl_LaunchIDNV.xy), vec4(hitData.normal.xyz, hitData.depth));
-	imageStore(posGBuffer, ivec2(gl_LaunchIDNV.xy), vec4(hitData.pos.xyz, hitData.cluster));
-	imageStore(viewGBuffer, ivec2(gl_LaunchIDNV.xy), vec4(ray.direction.xyz, hitData.material));
-	imageStore(motionGBuffer, ivec2(gl_LaunchIDNV.xy), hitData.motion);
+	imageStore(objectGBuffer, ivec2(gl_LaunchIDEXT.xy), hitData.object);
+	imageStore(albedoGBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(hitData.albedo));
+	imageStore(transparentGBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(hitData.transparent));
+	imageStore(normalGBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(hitData.normal.xyz, hitData.depth));
+	imageStore(posGBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(hitData.pos.xyz, hitData.cluster));
+	imageStore(viewGBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(ray.direction.xyz, hitData.material));
+	imageStore(motionGBuffer, ivec2(gl_LaunchIDEXT.xy), hitData.motion);
 
 	
 }

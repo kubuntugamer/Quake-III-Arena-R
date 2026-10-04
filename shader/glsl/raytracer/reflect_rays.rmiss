@@ -1,11 +1,11 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 #include "../constants.h"
 #include "defines.glsl"
 #include "sky.glsl"
 
-layout(location = PAYLOAD_SHADOW) rayPayloadInNV RayPayloadReflect rrp;
+layout(location = PAYLOAD_SHADOW) rayPayloadInEXT RayPayloadReflect rrp;
 
 void main()
 {
@@ -13,6 +13,6 @@ void main()
     rrp.pos = vec3(0);
     rrp.normal = vec3(0,0,1);
     rrp.material = MATERIAL_KIND_SKY;
-    rrp.color = sampleSky(gl_WorldRayDirectionNV);
+    rrp.color = sampleSky(gl_WorldRayDirectionEXT);
     rrp.object = vec4(-1, -1, uintBitsToFloat(uvec2(~0u)));
 }
