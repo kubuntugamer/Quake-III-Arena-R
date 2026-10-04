@@ -2577,6 +2577,13 @@ void R_CreatePrimaryRaysPipeline() {
 		VK_AddSampler(&vk_d.computeDescriptor[i], BINDING_OFFSET_RESULT, VK_SHADER_STAGE_COMPUTE_BIT);
 		VK_SetSampler(&vk_d.computeDescriptor[i], BINDING_OFFSET_RESULT, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.gBuffer[i].result.sampler, vk_d.gBuffer[i].result.view);
 
+		VK_AddStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_NORMAL_ROUGHNESS, VK_SHADER_STAGE_COMPUTE_BIT);
+		VK_SetStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_NORMAL_ROUGHNESS, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.accelerationStructures.nrdNormalRoughness[i].view);
+		VK_AddStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_VIEWZ, VK_SHADER_STAGE_COMPUTE_BIT);
+		VK_SetStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_VIEWZ, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.accelerationStructures.nrdViewZ[i].view);
+		VK_AddStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_MOTION, VK_SHADER_STAGE_COMPUTE_BIT);
+		VK_SetStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_NRD_MOTION, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.accelerationStructures.nrdMotion[i].view);
+
 		VK_FinishDescriptor(&vk_d.computeDescriptor[i]);
 	}
 
@@ -2651,6 +2658,12 @@ void R_CreatePrimaryRaysPipeline() {
 	VK_SetCompute2DescriptorSets(&vk_d.accelerationStructures.tonemappingPipeline, &vk_d.computeDescriptor[0], &vk_d.imageDescriptor);
 	VK_AddComputePushConstant(&vk_d.accelerationStructures.tonemappingPipeline, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t));
 	VK_FinishComputePipeline(&vk_d.accelerationStructures.tonemappingPipeline);
+
+	vkshader_t nrdPackShader = { 0 };
+	VK_NrdPackCompShader(&nrdPackShader);
+	VK_SetComputeShader(&vk_d.accelerationStructures.nrdPackPipeline, &nrdPackShader);
+	VK_SetCompute2DescriptorSets(&vk_d.accelerationStructures.nrdPackPipeline, &vk_d.computeDescriptor[0], &vk_d.imageDescriptor);
+	VK_FinishComputePipeline(&vk_d.accelerationStructures.nrdPackPipeline);
 
 	vkshader_t primaryRayShader = { 0 };
 	VK_RTX_PrimaryRayShader(&primaryRayShader);

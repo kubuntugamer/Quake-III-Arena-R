@@ -21,6 +21,7 @@
 #include "../../../shader/header/compositing.comp.h"
 #include "../../../shader/header/maxmipmap.comp.h"
 #include "../../../shader/header/tonemapping.comp.h"
+#include "../../../shader/header/nrd_pack.comp.h"
 
 // RTX
 #include "../../../shader/header/primary_rays.rgen.h"
@@ -55,6 +56,7 @@ static vkshader_t* asvgfTaaCompShader;
 static vkshader_t* compositingCompShader;
 static vkshader_t* maxmipmapCompShader;
 static vkshader_t* tonemappingCompShader;
+static vkshader_t* nrdPackCompShader;
 // rtx
 static vkshader_t* rayTracingAny;
 static vkshader_t* primaryRays;
@@ -181,6 +183,14 @@ void VK_TonemappingCompShader(vkshader_t* shader) {
 	Com_Memcpy(shader, tonemappingCompShader, sizeof(vkshader_t));
 }
 
+void VK_NrdPackCompShader(vkshader_t* shader) {
+	if (nrdPackCompShader == NULL) {
+		nrdPackCompShader = malloc(sizeof(vkshader_t));
+		VK_LoadCompShaderFromVariable(nrdPackCompShader, (const char *)nrd_packComp, sizeof(nrd_packComp));
+	}
+	Com_Memcpy(shader, nrdPackCompShader, sizeof(vkshader_t));
+}
+
 // rtx
 void VK_DestroyShader(vkshader_t* shader) {
 	for (int i = 0; i < shader->size; ++i) {
@@ -264,6 +274,11 @@ void VK_DestroyAllShaders() {
 		VK_DestroyShader(tonemappingCompShader);
 		free(tonemappingCompShader);
 		tonemappingCompShader = NULL;
+	}
+	if (nrdPackCompShader != NULL) {
+		VK_DestroyShader(nrdPackCompShader);
+		free(nrdPackCompShader);
+		nrdPackCompShader = NULL;
 	}
 	// RTX
 	if (rayTracingAny != NULL) {

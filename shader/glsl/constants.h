@@ -155,6 +155,9 @@
 #define BINDING_OFFSET_MAX_MIPMAP_IMG_ARRAY_PREV            0x00000100
 #define BINDING_OFFSET_MAX_MIPMAP_IMG_ARRAY                 0x00000110
 #define BINDING_OFFSET_RESULT                               0x00000111
+#define BINDING_OFFSET_NRD_NORMAL_ROUGHNESS                 0x00000113
+#define BINDING_OFFSET_NRD_VIEWZ                            0x00000114
+#define BINDING_OFFSET_NRD_MOTION                           0x00000115
 
 // shader offset
 #define SBT_RGEN_PRIMARY_RAYS						0x00000000
