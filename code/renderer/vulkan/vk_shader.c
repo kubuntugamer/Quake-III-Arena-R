@@ -289,6 +289,7 @@ void VK_DestroyAllShaders() {
 		VK_DestroyShader(fsrRcasCompShader);
 		free(fsrRcasCompShader);
 		fsrRcasCompShader = NULL;
+	}
 	if (nrdPackCompShader != NULL) {
 		VK_DestroyShader(nrdPackCompShader);
 		free(nrdPackCompShader);
