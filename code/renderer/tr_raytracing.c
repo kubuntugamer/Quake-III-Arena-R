@@ -1010,6 +1010,23 @@ static void RB_TraceRays() {
 		VK_Dispatch((vk.swapchain.extent.width), (vk.swapchain.extent.height), 1);
 	}
 
+	// FSR1 RCAS: native-res sharpen of the tonemapped result into fsrImage.
+	// (FsrRcasCon port: stops -> linear sharpness in con.x; F32 path ignores con.yzw.)
+	if (rt_fsr->integer == 1 && rt_tonemapping_reinhard->value == 1) {
+		uint32_t con[4];
+		float sharp = exp2f(-rt_fsrSharpness->value);
+		Com_Memcpy(&con[0], &sharp, sizeof(float));
+		con[1] = 0;
+		con[2] = 0;
+		con[3] = 0;
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.gBuffer[vk.swapchain.currentImage].result.handle);
+		VK_BindComputePipeline(&vk_d.accelerationStructures.fsrRcasPipeline);
+		VK_BindCompute2DescriptorSets(&vk_d.accelerationStructures.fsrRcasPipeline, &vk_d.computeDescriptor[vk.swapchain.currentImage], &vk_d.imageDescriptor);
+		VK_SetComputePushConstant(&vk_d.accelerationStructures.fsrRcasPipeline, VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t), &con[0]);
+		VK_Dispatch((vk.swapchain.extent.width), (vk.swapchain.extent.height), 1);
+		BARRIER_COMPUTE(vk.swapchain.CurrentCommandBuffer(), vk_d.accelerationStructures.fsrImage[vk.swapchain.currentImage].handle);
+	}
+
 }
 
 static void
@@ -1135,6 +1152,7 @@ void RB_RayTraceScene(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	//vkimage_t* drawImage = &vk_d.asvgf[vk.swapchain.currentImage].atrousA;
 	if(rt_tonemapping_reinhard->value == 1) drawImage = &vk_d.gBuffer[vk.swapchain.currentImage].result;
 	else drawImage = &vk_d.asvgf[vk.swapchain.currentImage].taa;
+	if (rt_fsr->integer == 1 && rt_tonemapping_reinhard->value == 1) drawImage = &vk_d.accelerationStructures.fsrImage[vk.swapchain.currentImage];
 	//vkimage_t* drawImage = &vk_d.gBuffer[vk.swapchain.currentImage].transparent;
 	//vkimage_t* drawImage = &vk_d.asvgf[vk.swapchain.currentImage].color;
 	//vkimage_t* drawImage = &vk_d.asvgf[vk.swapchain.currentImage].gradSamplePos;

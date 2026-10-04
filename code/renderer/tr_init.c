@@ -176,6 +176,8 @@ cvar_t* rt_dof;
 cvar_t* rt_denoiser;
 cvar_t* rt_brightness;
 cvar_t* rt_tonemapping_reinhard;
+cvar_t* rt_fsr;
+cvar_t* rt_fsrSharpness;
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral )
 {
@@ -430,6 +432,11 @@ static void InitVulkan(void)
 				VK_CreateImage(&vk_d.accelerationStructures.accumulationImage[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
 				VK_CreateSampler(&vk_d.accelerationStructures.accumulationImage[i], VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 				VK_TransitionImage(&vk_d.accelerationStructures.accumulationImage[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+				// FSR1 RCAS output (ping-pong of gBuffer.result, same format)
+				VK_CreateImage(&vk_d.accelerationStructures.fsrImage[i], vk.swapchain.extent.width, vk.swapchain.extent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1);
+				VK_CreateSampler(&vk_d.accelerationStructures.fsrImage[i], VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+				VK_TransitionImage(&vk_d.accelerationStructures.fsrImage[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			}
 			// Scratch buffer for AS build
 			VK_CreateRayTracingScratchBuffer(&vk_d.scratchBuffer, VK_MAX_DYNAMIC_BOTTOM_AS_INSTANCES * VK_AS_MEMORY_ALLIGNMENT_SIZE * sizeof(byte));
@@ -1277,6 +1284,8 @@ void R_Register( void )
 	rt_denoiser = ri.Cvar_Get("rt_denoiser", "1", 0);
 	rt_brightness = ri.Cvar_Get("rt_brightness", "0", 0);
 	rt_tonemapping_reinhard = ri.Cvar_Get("rt_tonemapping_reinhard", "1", 0);
+	rt_fsr = ri.Cvar_Get("rt_fsr", "0", 0);
+	rt_fsrSharpness = ri.Cvar_Get("rt_fsrSharpness", "0.5", 0);
 
 	// make sure all the commands added here are also
 	// removed in R_Shutdown
@@ -1548,6 +1557,7 @@ void RE_Shutdown( qboolean destroyWindow ) {
 				VK_DestroyBuffer(&vk_d.uboBuffer[i]);
 				VK_DestroyBuffer(&vk_d.uboLightList[i]);
 				VK_DestroyImage(&vk_d.accelerationStructures.resultImage[i]);
+				VK_DestroyImage(&vk_d.accelerationStructures.fsrImage[i]);
 				VK_DestroyImage(&vk_d.accelerationStructures.accumulationImage[i]);
 			}
 			VK_DestroyBuffer(&vk_d.scratchBuffer);

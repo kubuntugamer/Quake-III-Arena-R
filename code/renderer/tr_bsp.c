@@ -2577,6 +2577,9 @@ void R_CreatePrimaryRaysPipeline() {
 		VK_AddSampler(&vk_d.computeDescriptor[i], BINDING_OFFSET_RESULT, VK_SHADER_STAGE_COMPUTE_BIT);
 		VK_SetSampler(&vk_d.computeDescriptor[i], BINDING_OFFSET_RESULT, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.gBuffer[i].result.sampler, vk_d.gBuffer[i].result.view);
 
+		VK_AddStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_FSR_OUTPUT, VK_SHADER_STAGE_COMPUTE_BIT);
+		VK_SetStorageImage(&vk_d.computeDescriptor[i], BINDING_OFFSET_FSR_OUTPUT, VK_SHADER_STAGE_COMPUTE_BIT, vk_d.accelerationStructures.fsrImage[i].view);
+
 		VK_FinishDescriptor(&vk_d.computeDescriptor[i]);
 	}
 
@@ -2651,6 +2654,13 @@ void R_CreatePrimaryRaysPipeline() {
 	VK_SetCompute2DescriptorSets(&vk_d.accelerationStructures.tonemappingPipeline, &vk_d.computeDescriptor[0], &vk_d.imageDescriptor);
 	VK_AddComputePushConstant(&vk_d.accelerationStructures.tonemappingPipeline, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t));
 	VK_FinishComputePipeline(&vk_d.accelerationStructures.tonemappingPipeline);
+
+	vkshader_t fsrRcasShader = { 0 };
+	VK_FsrRcasCompShader(&fsrRcasShader);
+	VK_SetComputeShader(&vk_d.accelerationStructures.fsrRcasPipeline, &fsrRcasShader);
+	VK_SetCompute2DescriptorSets(&vk_d.accelerationStructures.fsrRcasPipeline, &vk_d.computeDescriptor[0], &vk_d.imageDescriptor);
+	VK_AddComputePushConstant(&vk_d.accelerationStructures.fsrRcasPipeline, VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t));
+	VK_FinishComputePipeline(&vk_d.accelerationStructures.fsrRcasPipeline);
 
 	vkshader_t primaryRayShader = { 0 };
 	VK_RTX_PrimaryRayShader(&primaryRayShader);
