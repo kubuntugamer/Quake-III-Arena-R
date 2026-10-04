@@ -33,7 +33,7 @@ qboolean VK_LoadInstanceFunctions(void)
 #elif defined(__APPLE__)
     vkCreateMacOSSurfaceMVK = VK_INSTANCE_LEVEL_FUNCTION("vkCreateMacOSSurfaceMVK");
 #elif defined( __linux__ )
-    
+    vkCreateXlibSurfaceKHR = VK_INSTANCE_LEVEL_FUNCTION("vkCreateXlibSurfaceKHR");
 #endif
     vkDestroySurfaceKHR = VK_INSTANCE_LEVEL_FUNCTION("vkDestroySurfaceKHR");
 	

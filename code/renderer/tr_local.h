@@ -1839,6 +1839,13 @@ void R_RotateForEntity( const trRefEntity_t *ent, const viewParms_t *viewParms, 
 */
 char* VK_ErrorString(VkResult errorCode);
 
+qboolean VK_LoadGlobalFunctions( void );
+qboolean VK_LoadInstanceFunctions( void );
+qboolean VK_LoadDeviceFunctions( void );
+void VK_Setup( void *p1, void *p2 );
+void VK_Destroy( void );
+void VK_GetDeviceProperties( VkPhysicalDeviceProperties *devProperties );
+
 #define VK_CHECK(function_call, msg) { \
 	VkResult result = function_call; \
 	if (result < 0) \

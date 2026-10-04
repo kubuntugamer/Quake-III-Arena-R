@@ -5,7 +5,7 @@ vkinstance_t vk;
 vkdata_t     vk_d;
 
 static const char* deviceExtensions[] = {
-#if defined( _WIN32 )
+#if defined( _WIN32 ) || defined( __linux__ )
 		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
 		VK_NV_RAY_TRACING_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
@@ -33,7 +33,8 @@ static const char* instanceExtensions[] = {
 #elif defined(__APPLE__)
 		VK_MVK_MACOS_SURFACE_EXTENSION_NAME
 #elif defined( __linux__ )
-
+		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+		VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
 #endif
 };
 
@@ -59,13 +60,13 @@ static qboolean VK_IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surfac
 static qboolean VK_CheckValidationLayerSupport();
 
 void VK_Setup(void* p1, void* p2) {
-    if (!VK_LoadGlobalFunctions()) return qfalse;
+    if (!VK_LoadGlobalFunctions()) return;
     VK_CreateInstance();
-    if (!VK_LoadInstanceFunctions()) return qfalse;
+    if (!VK_LoadInstanceFunctions()) return;
     VK_CreateSurface(p1, p2);
     VK_PickPhysicalDevice();
     VK_CreateLogicalDevice();
-    if (!VK_LoadDeviceFunctions()) return qfalse;
+    if (!VK_LoadDeviceFunctions()) return;
     VK_CreateCommandPool();
 #ifndef NDEBUG
     VK_SetupDebugCallback();
@@ -156,6 +157,7 @@ static void VK_CreateInstance() {
 **
 ** win:		(HINSTANCE, HWND)
 ** macOS:	(NSView, NULL)
+** linux:	(Display*, Window)
 */
 static void VK_CreateSurface(void* p1, void* p2) {
 #ifdef WIN32
@@ -174,7 +176,13 @@ static void VK_CreateSurface(void* p1, void* p2) {
     desc.pView = p1;
     VK_CHECK(vkCreateMacOSSurfaceMVK(vk.instance, &desc, NULL, &vk.surface), "failed to create MacOS Surface!");
 #elif defined( __linux__ )
-        
+	VkXlibSurfaceCreateInfoKHR desc = {0};
+	desc.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+	desc.pNext = NULL;
+	desc.flags = 0;
+	desc.dpy = (Display*)p1;
+	desc.window = (Window)(uintptr_t)p2;
+	VK_CHECK(vkCreateXlibSurfaceKHR(vk.instance, &desc, NULL, &vk.surface), "failed to create Xlib Surface!");
 #endif
 }
 

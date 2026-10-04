@@ -28,6 +28,11 @@
 
 #elif defined( __linux__ )
 
+#include <X11/Xlib.h>
+#define VK_USE_PLATFORM_XLIB_KHR
+#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+
 #else
 
 #include <gl.h>
@@ -66,7 +71,7 @@ PFN_vkCreateWin32SurfaceKHR						vkCreateWin32SurfaceKHR;
 #elif defined(__APPLE__)
 PFN_vkCreateMacOSSurfaceMVK                     vkCreateMacOSSurfaceMVK;
 #elif defined( __linux__ )
-
+PFN_vkCreateXlibSurfaceKHR				vkCreateXlibSurfaceKHR;
 #endif
 PFN_vkDestroySurfaceKHR                         vkDestroySurfaceKHR;
 
