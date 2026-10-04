@@ -25,6 +25,7 @@ static const char* optionalDeviceExtensions[] = {
 		VK_KHR_PRESENT_ID_EXTENSION_NAME,
 		VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
 		VK_NV_LOW_LATENCY_2_EXTENSION_NAME,
+		VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME,
 		VK_AMD_ANTI_LAG_EXTENSION_NAME,
 		VK_AMD_BUFFER_MARKER_EXTENSION_NAME,
 		VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME,
@@ -575,6 +576,9 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
 			}
 			if (!strcmp(optionalDeviceExtensions[i], VK_NV_LOW_LATENCY_2_EXTENSION_NAME)) {
 				vk.reflex = qtrue;
+			}
+			if (!strcmp(optionalDeviceExtensions[i], VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)) {
+				vk.diagnosticCheckpoints = qtrue;
 			}
 			ri.Printf(PRINT_ALL, "...enabling optional device extension %s\n", optionalDeviceExtensions[i]);
 		}

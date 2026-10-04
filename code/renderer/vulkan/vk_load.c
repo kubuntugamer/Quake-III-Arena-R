@@ -153,6 +153,8 @@ PFN_vkAntiLagUpdateAMD							vkAntiLagUpdateAMD;
 PFN_vkSetLatencySleepModeNV						vkSetLatencySleepModeNV;
 PFN_vkLatencySleepNV							vkLatencySleepNV;
 PFN_vkSetLatencyMarkerNV						vkSetLatencyMarkerNV;
+PFN_vkCmdSetCheckpointNV						vkCmdSetCheckpointNV;
+PFN_vkGetQueueCheckpointDataNV					vkGetQueueCheckpointDataNV;
 
 qboolean VK_LoadGlobalFunctions(void)
 {
@@ -336,6 +338,8 @@ qboolean VK_LoadDeviceFunctions(void)
 	*(void**)&vkSetLatencySleepModeNV = (void*)vkGetDeviceProcAddr(vk.device, "vkSetLatencySleepModeNV");
 	*(void**)&vkLatencySleepNV = (void*)vkGetDeviceProcAddr(vk.device, "vkLatencySleepNV");
 	*(void**)&vkSetLatencyMarkerNV = (void*)vkGetDeviceProcAddr(vk.device, "vkSetLatencyMarkerNV");
+	*(void**)&vkCmdSetCheckpointNV = (void*)vkGetDeviceProcAddr(vk.device, "vkCmdSetCheckpointNV");
+	*(void**)&vkGetQueueCheckpointDataNV = (void*)vkGetDeviceProcAddr(vk.device, "vkGetQueueCheckpointDataNV");
 
     return qtrue;
 }

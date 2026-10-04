@@ -1175,6 +1175,7 @@ typedef struct {
 	qboolean					presentWait; // VK_KHR_present_wait enabled
 	qboolean					antiLag; // VK_AMD_anti_lag enabled (driver-paced presents)
 	qboolean					reflex; // VK_NV_low_latency2 enabled (markers + boost)
+	qboolean					diagnosticCheckpoints; // VK_NV_device_diagnostic_checkpoints enabled
 	qboolean					coherentMemory; // a DEVICE_COHERENT heap was picked for uploads
 	uint32_t					amdComputeUnits; // from VK_AMD_shader_core_properties2
 
@@ -1861,8 +1862,10 @@ VkDeviceAddress VK_GetBufferDeviceAddress( VkBuffer buffer );
 
 #define VK_CHECK(function_call, msg) { \
 	VkResult result = function_call; \
-	if (result < 0) \
+	if (result < 0) { \
+		VK_DumpCheckpoints(); \
 		ri.Error(ERR_FATAL, "Vulkan: %s %s", msg, VK_ErrorString(result)); \
+	} \
 }
 
 swapChainSupportDetails_t querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
@@ -1951,6 +1954,7 @@ void RB_UploadCluster(vkbuffer_t* buffer, uint32_t offsetIDX, int defaultC);
 int RB_TryMergeCluster(int cluster[3], int defaultC);
 void VK_ReadPixelsScreen(qboolean alpha, byte* buffer);
 void VK_SetPerformanceMarker(VkCommandBuffer command_buffer, int index);
+void VK_DumpCheckpoints(void);
 void VK_ResetPerformanceQueryPool(VkCommandBuffer command_buffer);
 void VK_CreateBufferMemory(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
 void VK_CreateImageMemory(VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory* bufferMemory);

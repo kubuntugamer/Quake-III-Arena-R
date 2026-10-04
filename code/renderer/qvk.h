@@ -226,5 +226,7 @@ extern PFN_vkAntiLagUpdateAMD							vkAntiLagUpdateAMD;
 extern PFN_vkSetLatencySleepModeNV						vkSetLatencySleepModeNV;
 extern PFN_vkLatencySleepNV							vkLatencySleepNV;
 extern PFN_vkSetLatencyMarkerNV						vkSetLatencyMarkerNV;
+extern PFN_vkCmdSetCheckpointNV						vkCmdSetCheckpointNV;
+extern PFN_vkGetQueueCheckpointDataNV					vkGetQueueCheckpointDataNV;
 
 #endif

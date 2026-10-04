@@ -401,6 +401,49 @@ VkDeviceAddress VK_GetBufferDeviceAddress(VkBuffer buffer) {
 void VK_SetPerformanceMarker(VkCommandBuffer command_buffer, int index) {
 	vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 		vk.queryPool, (vk.swapchain.currentImage * PROFILER_IN_FLIGHT) + index);
+	// Nsight correlation: same phase boundaries as user markers (NV only)
+	if (vk.diagnosticCheckpoints && vkCmdSetCheckpointNV != NULL &&
+		index >= 0 && index < PROFILER_IN_FLIGHT) {
+		static const char *markerNames[PROFILER_IN_FLIGHT] = {
+			"BUILD_AS_BEGIN", "BUILD_AS_END",
+			"ASVGF_RNG_BEGIN", "ASVGF_RNG_END",
+			"ASVGF_FORWARD_BEGIN", "ASVGF_FORWARD_END",
+			"PRIMARY_RAYS_BEGIN", "PRIMARY_RAYS_END",
+			"REFLECTION_REFRACTION_BEGIN", "REFLECTION_REFRACTION_END",
+			"DIRECT_ILLUMINATION_BEGIN", "DIRECT_ILLUMINATION_END",
+			"INDIRECT_ILLUMINATION_BEGIN", "INDIRECT_ILLUMINATION_END",
+			"ASVGF_GRADIENT_BEGIN", "ASVGF_GRADIENT_END",
+			"ASVGF_GRADIENT_ATROUS_BEGIN", "ASVGF_GRADIENT_ATROUS_END",
+			"ASVGF_TEMPORAL_BEGIN", "ASVGF_TEMPORAL_END",
+			"ASVGF_ATROUS_BEGIN", "ASVGF_ATROUS_END",
+			"ASVGF_TAA_BEGIN", "ASVGF_TAA_END"
+		};
+		vkCmdSetCheckpointNV(command_buffer, markerNames[index]);
+	}
+}
+
+// Last-completed checkpoints after a device loss (TDR triage: shows which
+// pass hung the GPU). Safe to call from the fatal path; prints nothing
+// when the extension is absent.
+void VK_DumpCheckpoints(void) {
+	uint32_t count = 0;
+	if (!vk.diagnosticCheckpoints || vkGetQueueCheckpointDataNV == NULL) {
+		return;
+	}
+	vkGetQueueCheckpointDataNV(vk.graphicsQueue, &count, NULL);
+	if (count == 0) {
+		ri.Printf(PRINT_WARNING, "Vulkan: no checkpoints completed on graphics queue\n");
+		return;
+	}
+	{
+		VkCheckpointDataNV *data = malloc(count * sizeof(VkCheckpointDataNV));
+		vkGetQueueCheckpointDataNV(vk.graphicsQueue, &count, &data[0]);
+		ri.Printf(PRINT_WARNING, "Vulkan: last completed checkpoints (%u):\n", count);
+		for (uint32_t i = 0; i < count; i++) {
+			ri.Printf(PRINT_WARNING, "  [%u] %s\n", i, (const char *)data[i].pCheckpointMarker);
+		}
+		free(data);
+	}
 }
 
 void VK_ResetPerformanceQueryPool(VkCommandBuffer command_buffer) {
