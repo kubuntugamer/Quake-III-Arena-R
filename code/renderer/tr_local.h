@@ -1180,7 +1180,7 @@ typedef struct {
 	uint32_t					amdComputeUnits; // from VK_AMD_shader_core_properties2
 
 	// Multi-GPU support
-	VkPhysicalDevice			secondaryPhysicalDevice; // AMD iGPU for compute
+	VkPhysicalDevice			secondaryPhysicalDevice; // second suitable GPU, for compute
 	VkDevice					secondaryDevice;
 	VkQueue						secondaryComputeQueue;
 	uint32_t					secondaryComputeFamily;

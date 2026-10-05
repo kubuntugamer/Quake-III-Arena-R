@@ -257,45 +257,122 @@ static void VK_CreateSurface(void* p1, void* p2) {
 #endif
 }
 
+// Total device-local VRAM. Not a member of VkPhysicalDeviceProperties, and some
+// drivers split it across several heaps, so sum every heap flagged device-local.
+static uint64_t VK_DeviceLocalMemorySize( VkPhysicalDevice device )
+{
+	VkPhysicalDeviceMemoryProperties mem;
+	vkGetPhysicalDeviceMemoryProperties(device, &mem);
+
+	uint64_t total = 0;
+	for (uint32_t i = 0; i < mem.memoryHeapCount; i++) {
+		if (mem.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+			total += mem.memoryHeaps[i].size;
+		}
+	}
+	return total;
+}
+
+// How good a device is for driving graphics + presentation. Vendor neutral on
+// purpose: Vulkan's own deviceType is the signal, so an Intel Arc dGPU, an AMD
+// dGPU and an NVIDIA dGPU all get identical treatment and no vendor is special
+// cased. Device-local memory breaks ties, because how much VRAM is left over
+// for acceleration structures is what actually decides whether the raytracing
+// path fits.
+static int VK_DeviceRank( VkPhysicalDevice device, const VkPhysicalDeviceProperties *props )
+{
+	int typeRank;
+	switch ( props->deviceType ) {
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   typeRank = 3; break;
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: typeRank = 2; break;
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    typeRank = 1; break;
+		default:                                     typeRank = 0; break;	// CPU / unknown
+	}
+
+	// Bucketed rather than compared raw: integrated parts commonly report 0 or a
+	// shared-memory figure, and all we need is to separate tiny from roomy.
+	uint64_t mem = VK_DeviceLocalMemorySize(device);
+	int memRank = ( mem > ( 1ull << 32 ) ) ? 2 : ( mem > 0 ? 1 : 0 );
+
+	return typeRank * 4 + memRank;
+}
+
 static void VK_PickPhysicalDevice()
 {
-	VkPhysicalDevice nvidiaDevice = VK_NULL_HANDLE;
-	VkPhysicalDevice amdDevice = VK_NULL_HANDLE;
+	uint32_t deviceCount = 0;
+	vkEnumeratePhysicalDevices(vk.instance, &deviceCount, NULL);
+	if (deviceCount == 0) {
+		ri.Error(ERR_FATAL, "Vulkan: failed to find GPUs with Vulkan support!");
+	}
 
-	{
-		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(vk.instance, &deviceCount, NULL);
-		if (deviceCount == 0) {
-			ri.Error(ERR_FATAL, "Vulkan: failed to find GPUs with Vulkan support!");
+	// Sized from the enumeration instead of a fixed 10: with a few software ICDs
+	// installed alongside real hardware the loader can legitimately report more.
+	VkPhysicalDevice *devices = (VkPhysicalDevice *)malloc(deviceCount * sizeof(VkPhysicalDevice));
+	if (devices == NULL) {
+		ri.Error(ERR_FATAL, "Vulkan: out of memory enumerating GPUs!");
+	}
+	if (vkEnumeratePhysicalDevices(vk.instance, &deviceCount, devices) != VK_SUCCESS) {
+		free(devices);
+		ri.Error(ERR_FATAL, "Vulkan: failed to enumerate GPUs!");
+	}
+
+	// Keep the two best devices that can actually present to our surface. Any
+	// further device is ignored - including software rasterisers, which the
+	// loader happily reports alongside real hardware.
+	VkPhysicalDevice best = VK_NULL_HANDLE, next = VK_NULL_HANDLE;
+	int bestRank = -1, nextRank = -1;
+
+	for (uint32_t i = 0; i < deviceCount; i++) {
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(devices[i], &props);
+
+		if (!VK_IsDeviceSuitable(devices[i], vk.surface)) {
+			continue;
 		}
-		VkPhysicalDevice devices[10];
-		vkEnumeratePhysicalDevices(vk.instance, &deviceCount, &devices[0]);
 
-		// First pass: find NVIDIA (primary) and AMD (secondary) devices
-		for (int i = 0; i < deviceCount; i++) {
-			VkPhysicalDeviceProperties props;
-			vkGetPhysicalDeviceProperties(devices[i], &props);
-			if (VK_IsDeviceSuitable(devices[i], vk.surface)) {
-				if (props.vendorID == 0x10DE && nvidiaDevice == VK_NULL_HANDLE) {
-					// NVIDIA - prefer as primary (graphics + present)
-					nvidiaDevice = devices[i];
-				} else if (props.vendorID == 0x1002 && amdDevice == VK_NULL_HANDLE) {
-					// AMD - use as secondary (compute)
-					amdDevice = devices[i];
-				} else if (vk.physicalDevice == VK_NULL_HANDLE) {
-					// Fallback: any suitable device
-					vk.physicalDevice = devices[i];
-				}
-			}
+		int rank = VK_DeviceRank(devices[i], &props);
+		if (rank > bestRank) {
+			next = best; nextRank = bestRank;	// old winner slides into the compute slot
+			best = devices[i]; bestRank = rank;
+		} else if (rank > nextRank) {
+			next = devices[i]; nextRank = rank;
 		}
+	}
 
-		// Prefer NVIDIA as primary if available
-		if (nvidiaDevice != VK_NULL_HANDLE) {
-			vk.physicalDevice = nvidiaDevice;
-			vk.secondaryPhysicalDevice = amdDevice;
-		} else if (amdDevice != VK_NULL_HANDLE) {
-			vk.physicalDevice = amdDevice;
-			vk.secondaryPhysicalDevice = VK_NULL_HANDLE;
+	free(devices);
+
+	// Never hand raytracing a CPU device - a software Vulkan target is far slower
+	// than simply staying single-GPU.
+	if (next != VK_NULL_HANDLE) {
+		VkPhysicalDeviceProperties np;
+		vkGetPhysicalDeviceProperties(next, &np);
+		if (np.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+			next = VK_NULL_HANDLE;
+		}
+	}
+
+	vk.physicalDevice = best;
+	vk.secondaryPhysicalDevice = next;
+
+	if (vk.physicalDevice != VK_NULL_HANDLE) {
+		// VK_IsDeviceSuitable() caches the queue family indices of whichever
+		// device it last accepted, which during the loop above is not necessarily
+		// the one we settled on. Re-query so the indices belong to the device we
+		// are about to create a logical device on.
+		VK_IsDeviceSuitable(vk.physicalDevice, vk.surface);
+	}
+
+	if (vk.physicalDevice != VK_NULL_HANDLE) {
+		VkPhysicalDeviceProperties chosen;
+		vkGetPhysicalDeviceProperties(vk.physicalDevice, &chosen);
+		if (vk.secondaryPhysicalDevice != VK_NULL_HANDLE) {
+			VkPhysicalDeviceProperties second;
+			vkGetPhysicalDeviceProperties(vk.secondaryPhysicalDevice, &second);
+			ri.Printf(PRINT_ALL, "Vulkan: graphics on %s, raytracing compute on %s\n",
+				chosen.deviceName, second.deviceName);
+		} else {
+			ri.Printf(PRINT_ALL, "Vulkan: graphics on %s (no second GPU for compute)\n",
+				chosen.deviceName);
 		}
 	}
 
@@ -425,9 +502,9 @@ static void VK_CreateLogicalDevice()
 
 	VK_CHECK(vkCreateDevice(vk.physicalDevice, &primaryDesc, NULL, &vk.device), "failed to create logical device!")
 
-	// Create secondary logical device for AMD iGPU if available
+	// Create a second logical device for raytracing compute, if a second
+	// suitable GPU was found. Any vendor will do.
 	if (vk.secondaryPhysicalDevice != VK_NULL_HANDLE) {
-		fprintf(stderr, "DBG: Creating secondary logical device for AMD iGPU\n");
 		
 		// Find compute queue family on secondary device
 		uint32_t secQueueCount = 0;
