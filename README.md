@@ -27,6 +27,15 @@ In order to run the game, blue noise textures are requiered. Copy the folder `bl
 - [stb](https://github.com/nothings/stb.git "stb")
 Please clone this git with submodules
 
+##### Linux dependencies (Debian/Ubuntu):
+```bash
+sudo apt install build-essential cmake git \
+    libsdl2-dev libvulkan-dev vulkan-tools \
+    libwayland-dev wayland-protocols libxkbcommon-dev \
+    libx11-dev libxext-dev libxcb1-dev libxcb-xkb-dev
+```
+TinyJPEG and stb are vendored as git submodules (`git submodule update --init`).
+
 CHANGES ON `reforged`
 ====================
 
