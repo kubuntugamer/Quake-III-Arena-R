@@ -5156,6 +5156,11 @@ void _UI_Init( qboolean inGameLoad ) {
 		trap_Cvar_Set("ui_TeamArenaFirstRun", "1");
 	}
 
+	// First-run calibration
+	if (trap_Cvar_VariableValue("ui_firstRun") != 0) {
+		trap_Cmd_ExecuteText(EXEC_APPEND, "run_calibration 0\n");
+	}
+
 	trap_Cvar_Register(NULL, "debug_protocol", "", 0 );
 
 	trap_Cvar_Set("ui_actualNetGameType", va("%d", ui_netGameType.integer));

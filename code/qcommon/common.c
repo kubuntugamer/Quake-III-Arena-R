@@ -2419,6 +2419,18 @@ void Com_Init(char *commandLine) {
 
 	Cbuf_Execute();
 
+	// First-run detection: check if q3config.cfg exists in homepath
+	// If not, set ui_firstRun cvar so UI can show calibration screen
+	{
+		fileHandle_t f;
+		if (FS_FOpenFileRead("q3config.cfg", &f, qfalse) < 0) {
+			// q3config.cfg doesn't exist - first run
+			Cvar_Set("ui_firstRun", "1");
+		} else {
+			FS_FCloseFile(f);
+		}
+	}
+
 	// override anything from the config files with command line args
 	Com_StartupVariable(NULL);
 
@@ -2460,6 +2472,9 @@ void Com_Init(char *commandLine) {
 	com_buildScript = Cvar_Get("com_buildScript", "0", 0);
 
 	com_introPlayed = Cvar_Get("com_introplayed", "0", CVAR_ARCHIVE);
+
+	// First-run calibration mode
+	Cvar_Get("ui_firstRun", "0", CVAR_ROM); // Set by engine on first run, cleared by UI
 
 #if defined(_WIN32) && defined(_DEBUG)
 	com_noErrorInterrupt = Cvar_Get("com_noErrorInterrupt", "0", 0);

@@ -100,6 +100,7 @@ extern void SV_BotFrame( int time );
 void CL_CheckForResend( void );
 void CL_ShowIP_f(void);
 void CL_ServerStatus_f(void);
+void CL_RunCalibration_f(void);
 void CL_ServerStatusResponse( netadr_t from, msg_t *msg );
 
 /*
@@ -2262,13 +2263,74 @@ void CL_SetModel_f( void ) {
 	}
 }
 
+
+/*
+====================
+CL_RunCalibration_f
+
+Run the first-time calibration / quick setup
+====================
+*/
+void CL_RunCalibration_f( void ) {
+	int mode = 0; // 0 = quick start, 1 = calibration mode
+
+	if (Cmd_Argc() > 1) {
+		mode = atoi(Cmd_Argv(1));
+	}
+
+	if (mode == 1) {
+		// Calibration mode - run benchmark to find optimal settings
+		Com_Printf("Running calibration mode...\n");
+		Com_Printf("This will test various settings to find optimal performance.\n");
+		Com_Printf("Not yet implemented - using quick start defaults for now.\n");
+		// TODO: Implement actual calibration benchmark
+		// For now, fall through to quick start
+	}
+
+	// Quick start - apply sensible defaults
+	Com_Printf("Applying quick start defaults...\n");
+
+	// Video settings
+	Cvar_Set("r_mode", "14");           // Desktop resolution
+	Cvar_Set("r_fullscreen", "1");      // Fullscreen
+	Cvar_Set("r_vertexLight", "0");     // Rasterization (works on all GPUs)
+	Cvar_Set("r_fsrScale", "0");        // No FSR upscaling by default
+	Cvar_Set("com_maxfps", "144");      // High FPS cap
+	Cvar_Set("r_swapInterval", "1");    // VSync on
+
+	// Input settings
+	Cvar_Set("sensitivity", "5");       // Mouse sensitivity
+	Cvar_Set("cl_mouseAccel", "0");     // No mouse acceleration
+	Cvar_Set("m_pitch", "0.022");       // Mouse pitch
+	Cvar_Set("m_yaw", "0.022");         // Mouse yaw
+
+	// Audio settings
+	Cvar_Set("s_volume", "0.8");        // Master volume
+	Cvar_Set("s_musicvolume", "0.5");   // Music volume
+
+	// Network settings
+	Cvar_Set("rate", "25000");          // High bandwidth
+	Cvar_Set("cl_maxpackets", "100");   // High packet rate
+	Cvar_Set("snaps", "40");            // Snapshot rate
+
+	// Write the configuration
+	Cbuf_AddText("writeconfig q3config.cfg\n");
+	Cbuf_Execute();
+
+	// Clear first-run flag
+	Cvar_Set("ui_firstRun", "0");
+
+	Com_Printf("Quick start configuration saved to q3config.cfg\n");
+	Com_Printf("You can run 'run_calibration 1' later for full calibration.\n");
+}
+
+
 /*
 ====================
 CL_Init
 ====================
 */
-void CL_Init( void ) {
-	Com_Printf( "----- Client Initialization -----\n" );
+void CL_Init( void ) {	Com_Printf( "----- Client Initialization -----\n" );
 
 	Con_Init ();	
 
@@ -2397,6 +2459,7 @@ void CL_Init( void ) {
 	Cmd_AddCommand ("fs_openedList", CL_OpenedPK3List_f );
 	Cmd_AddCommand ("fs_referencedList", CL_ReferencedPK3List_f );
 	Cmd_AddCommand ("model", CL_SetModel_f );
+	Cmd_AddCommand ("run_calibration", CL_RunCalibration_f );
 	CL_InitRef();
 
 	SCR_Init ();
@@ -2452,6 +2515,7 @@ void CL_Shutdown( void ) {
 	Cmd_RemoveCommand ("serverstatus");
 	Cmd_RemoveCommand ("showip");
 	Cmd_RemoveCommand ("model");
+	Cmd_RemoveCommand ("run_calibration");
 
 	Cvar_Set( "cl_running", "0" );
 
