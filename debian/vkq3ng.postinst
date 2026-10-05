@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Update desktop database
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database /usr/share/applications
+        fi
+
+        # Update icon cache
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -f -t /usr/share/pixmaps 2>/dev/null || true
+        fi
+
+        # Ensure baseq3 directory exists with correct permissions
+        mkdir -p /usr/share/games/vkq3ng/baseq3
+        chmod 755 /usr/share/games/vkq3ng/baseq3
+
+        # Set up update-alternatives for vkq3ng command (in case of multiple versions)
+        update-alternatives --install /usr/bin/vkq3ng vkq3ng /usr/bin/vkq3ng 50 \
+            --slave /usr/share/man/man6/vkq3ng.6.gz vkq3ng.6.gz /usr/share/man/man6/vkq3ng.6.gz 2>/dev/null || true
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

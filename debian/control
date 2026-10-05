@@ -1,0 +1,74 @@
+Source: vkq3ng
+Section: games
+Priority: optional
+Maintainer: Chas Bigham <chasbigham@gmail.com>
+Build-Depends: cmake (>= 3.14),
+               debhelper (>= 13~),
+               libsdl2-dev,
+               libvulkan-dev,
+               libwayland-dev,
+               wayland-protocols,
+               libxkbcommon-dev,
+               libx11-dev,
+               libxext-dev,
+               libxcb1-dev,
+               libxcb-xkb-dev,
+               vulkan-tools,
+               pkg-config,
+               git
+Standards-Version: 4.6.2
+Homepage: https://github.com/kubuntugamer/Quake-III-Arena-R
+Vcs-Git: https://github.com/kubuntugamer/Quake-III-Arena-R.git
+Vcs-Browser: https://github.com/kubuntugamer/Quake-III-Arena-R
+Rules-Requires-Root: no
+
+Package: vkq3ng
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         libsdl2-2.0-0,
+         libwayland-client0,
+         libxkbcommon0,
+         libx11-6,
+         libxext6,
+         libxcb1,
+         libvulkan1,
+         desktop-file-utils
+Recommends: vkq3ng-data,
+            libgtk-3-bin | gtk-update-icon-cache
+Description: vkq3ng - Vulkan Quake 3 Next Generation engine
+ Vulkan Quake 3 Next Generation (vkq3ng) is a modern Vulkan-based
+ engine for Quake III Arena featuring ray-tracing support,
+ Wayland native backend, SDL2 audio, and FSR-style render scaling.
+ .
+ This is the engine only - you must provide your own Quake III Arena
+ game data (baseq3/pak0.pk3 through pak8.pk3). Place them in
+ /usr/share/games/vkq3ng/baseq3/ or in ~/.vkq3ng/baseq3/.
+
+Package: vkq3ng-data
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: vkq3ng - game data directory structure
+ This package creates the directory structure for vkq3ng game
+ data. It does not include the actual game assets (pak0.pk3 etc.),
+ which must be obtained from a licensed copy of Quake III Arena.
+ .
+ Place your retail pak files in /usr/share/games/vkq3ng/baseq3/ or
+ in ~/.vkq3ng/baseq3/.
+
+Package: vkq3ng-server
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         vkq3ng (= ${binary:Version})
+Description: vkq3ng dedicated server
+ This package provides the dedicated server for vkq3ng.
+ It uses the same engine as the client but runs in headless mode.
+ Run with: vkq3ng +set dedicated 2 +set net_port 27960 +exec server.cfg
+
+Package: q3asm
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: vkq3ng - q3asm VM compiler
+ This package provides q3asm, the virtual machine assembly compiler
+ used for compiling vkq3ng game logic (qagame, cgame, ui).
+ Installed to /usr/lib/vkq3ng/q3asm.

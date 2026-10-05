@@ -1,4 +1,4 @@
-# Quake III Arena R — Linux / Vulkan / Ray Tracing
+# Vk Quake III NG — Linux / Vulkan / Ray Tracing
 
 A Linux-focused fork of **Quake III Arena** that replaces the original OpenGL renderer with a
 **Vulkan backend**, adds **hardware ray tracing** as an optional path, and keeps the classic
@@ -69,7 +69,7 @@ must supply your own legally obtained copy of the retail game data.
 | Multi-GPU compute offload | **Stub** | Device is created but never used for work |
 | AI denoiser / TSR / predictors | **Stub** | Cvars exist; no code path reaches them |
 | `io_uring` file I/O | **Implemented, opt-in, unbenchmarked** | All cvars default to `0` |
-| Windows build | **Untested by this fork** | See [Known limitations](#known-limitations) |
+
 
 "**unreleased**" means the change is complete and builds clean in the working tree but is not yet
 committed to the `reforged` branch.
@@ -563,8 +563,7 @@ This is the honest list. Nothing below has been confirmed on real hardware.
   path is never initialised.
 - **The second GPU is created but unused.** Multi-GPU compute is not implemented.
 - **FSR is a bilinear upscale, not AMD FSR 1.**
-- **This fork is Linux-focused.** The Windows build exists but is untested here, and the build
-  instructions below are not maintained.
+
 - **Game data is not included.** `pak0.pk3` must come from your own purchase.
 - **`io_uring` support is unmeasured** and opt-in.
 - **No regression test suite.** Verification has been manual: build, run, observe.
@@ -626,14 +625,6 @@ code/
 │   ├── linux_vkimp.c     Window creation, Wayland/X11 selection
 │   ├── linux_snd.c       SDL2 audio
 │   └── linux_uring.c     io_uring file I/O
-└── win32/             Windows platform layer
-```
-
-### Compiling on Windows
-
-Not maintained by this fork. Use the provided `bat` file to generate a Visual Studio project, and
-point `fs_basePath` at a directory containing the game data.
-
 ---
 
 ## Screenshots

@@ -45,6 +45,7 @@ include_directories(${CMAKE_SOURCE_DIR}/code/botlib)
 
 # EXECUTABLE
 add_executable(${APP_UNIX} ${SOURCES})
+set_target_properties(${APP_UNIX} PROPERTIES OUTPUT_NAME "vkq3ng.engine")
 target_link_libraries(${APP_UNIX} "${X11_LIBRARIES}")
 target_link_libraries(${APP_UNIX} wayland-client)
 target_link_libraries(${APP_UNIX} "${CMAKE_DL_LIBS}")
@@ -67,3 +68,16 @@ endif()
 
 # DEPENDENCIES
 add_dependencies(${APP_UNIX} ${LIB_RENDERER} ${LIB_BOTLIB} ${LIB_SPLINES} ${LIB_GAME} ${LIB_CGAME} ${LIB_Q3UI})
+
+# INSTALL
+install(TARGETS ${APP_UNIX}
+        RUNTIME DESTINATION bin
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+
+# Install wrapper script that sets up paths
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/vkq3ng.sh.in
+               ${CMAKE_CURRENT_BINARY_DIR}/vkq3ng
+               @ONLY)
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/vkq3ng
+        DESTINATION bin
+        RENAME vkq3ng)

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=vkq3ng
+GenericName=Vulkan Quake 3 Next Generation
+Comment=Classic arena shooter with Vulkan renderer and ray tracing
+Exec=vkq3ng
+Icon=vkq3ng
+Terminal=false
+Categories=Game;ActionGame;
+Keywords=quake;arena;shooter;fps;vulkan;raytracing;
+StartupNotify=true
+StartupWMClass=vkq3ng

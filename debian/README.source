@@ -1,0 +1,13 @@
+This package uses the "3.0 (quilt)" source format.
+
+Patches are applied automatically by dpkg-source during build. To
+manage patches, you can use the quilt tool:
+
+  quilt push -a    # apply all patches
+  quilt pop -a     # remove all patches
+  quilt new patchname  # create a new patch
+  quilt add file    # add a file to the current patch
+
+For more information, see:
+  https://wiki.debian.org/UsingQuilt
+  man quilt

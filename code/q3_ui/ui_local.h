@@ -731,6 +731,11 @@ void UI_NetworkOptionsMenu_Cache( void );
 void UI_NetworkOptionsMenu( void );
 
 //
+// ui_options.c - Advanced
+//
+void UI_AdvancedOptionsMenu( void );
+
+//
 // ui_gameinfo.c
 //
 typedef enum {

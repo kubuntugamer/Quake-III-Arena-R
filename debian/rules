@@ -1,0 +1,54 @@
+#!/usr/bin/make -f
+# Debian packaging rules for vkq3ng - Vulkan Quake 3 Next Generation
+
+export DH_VERBOSE = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CFLAGS_MAINT_APPEND = -fstack-protector-strong
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,-z,relro -Wl,-z,now
+
+# Use all available cores for build
+DEB_BUILD_OPTIONS += parallel=$(shell nproc)
+
+%:
+	dh $@ --buildsystem=cmake --builddirectory=build
+
+# Override dh_auto_configure to pass custom CMake options
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DQ3_VM_DYNAMIC=ON
+
+# Override dh_auto_install to handle our custom layout
+override_dh_auto_install:
+	dh_auto_install
+	# Install desktop entry and icon
+	install -D -m 644 debian/vkq3ng.desktop \
+		debian/vkq3ng/usr/share/applications/vkq3ng.desktop
+	install -D -m 644 debian/vkq3ng.png \
+		debian/vkq3ng/usr/share/pixmaps/vkq3ng.png
+	# Create baseq3 directory structure
+	mkdir -p debian/vkq3ng-data/usr/share/games/vkq3ng/baseq3
+	# Create server symlink
+	mkdir -p debian/vkq3ng-server/usr/bin
+	ln -sf vkq3ng debian/vkq3ng-server/usr/bin/vkq3ng-server
+
+# Don't strip debug symbols from the engine (useful for crash reports)
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+# Don't run tests (none exist)
+override_dh_auto_test:
+	@echo "No tests defined"
+
+# Install man page
+override_dh_installman:
+	dh_installman debian/vkq3ng.6
+
+# Install changelog
+override_dh_installchangelogs:
+	dh_installchangelogs README.md
+
+# Install docs
+override_dh_installdocs:
+	dh_installdocs README.md

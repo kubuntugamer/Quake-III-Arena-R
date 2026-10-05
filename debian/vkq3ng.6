@@ -1,0 +1,91 @@
+.\" Manpage for vkq3ng
+.\" Generated from markdown - see README.md for full documentation
+.TH VKQ3NG 6 "October 2026" "vkq3ng 1.0.0" "User Commands"
+.SH NAME
+vkq3ng \- Vulkan Quake 3 Next Generation engine with ray tracing
+.SH SYNOPSIS
+.B vkq3ng
+[\fIoptions\fR]
+.SH DESCRIPTION
+.B vkq3ng
+is the Vulkan Quake 3 Next Generation game engine featuring a modern
+Vulkan renderer with ray-tracing support, Wayland native backend,
+SDL2 audio, and FSR-style render scaling.
+
+This is the engine only - you must provide your own Quake III Arena
+game data (baseq3/pak0.pk3 through pak8.pk3).
+.SH OPTIONS
+The engine accepts all standard Quake III Arena command-line options.
+Common options include:
+
+.TP
+\fB+set fs_basepath \fIpath\fR
+Set the base installation path (read-only game data).
+.TP
+\fB+set fs_homepath \fIpath\fR
+Set the user home path (writable config, mods, screenshots).
+.TP
+\fB+set fs_game \fIname\fR
+Set the game directory (mod name, e.g. "baseq3", "missionpack").
+.TP
+\fB+set r_renderer \fIrenderer\fR
+Select renderer: "vk" (Vulkan, default), "vk_rt" (Vulkan ray-tracing).
+.TP
+\fB+set r_gpuIndex \fIindex\fR
+Select GPU by index (0 = first).
+.TP
+\fB+set r_rayTracing \fI0|1\fR
+Enable/disable ray-tracing (requires RTX-class hardware).
+.TP
+\fB+set r_fsrScale \fIvalue\fR
+Render scale factor for FSR-style upscaling (0.5-1.0).
+.TP
+\fB+set r_wayland \fI0|1\fR
+Force Wayland (1) or X11 (0) backend.
+.TP
+\fB+set com_ansiColor \fI0|1\fR
+Enable/disable ANSI color in console output.
+.TP
+\fB+set developer \fI0|1|2\fR
+Developer mode verbosity.
+.SH FILES
+.TP
+\fI/usr/share/games/vkq3ng/baseq3/\fR
+System-wide game data directory (read-only). Place retail pak files here.
+.TP
+\fI~/.vkq3ng/\fR
+User home directory (writable). Contains config, mods, demos, screenshots.
+.TP
+\fI/usr/lib/vkq3ng/\fR
+Engine libraries (cgame, qagame, ui modules).
+.SH ENVIRONMENT
+.TP
+\fBVK_ICD_FILENAMES\fR
+Override Vulkan ICD path.
+.TP
+\fBWAYLAND_DISPLAY\fR
+Wayland display to connect to.
+.TP
+\fBDISPLAY\fR
+X11 display to connect to (fallback).
+.SH EXAMPLES
+.TP
+Start with retail data in system location:
+.B vkq3ng
+.TP
+Start with data in custom location:
+.B vkq3ng +set fs_basepath /mnt/games/quake3
+.TP
+Start dedicated server:
+.B vkq3ng-server +set dedicated 2 +set net_port 27960 +exec server.cfg
+.TP
+Benchmark with Vulkan ray-tracing:
+.B vkq3ng +set r_renderer vk_rt +set r_rayTracing 1 +set timedemo 1 +demo demo1
+.SH SEE ALSO
+.BR vkq3ng-server (6),
+.BR q3asm (1)
+.SH AUTHORS
+Original engine by id Software.
+vkq3ng fork by Chas Bigham <chasbigham@gmail.com> and contributors.
+.SH LICENSE
+GPL-2.0-only (engine), proprietary (game data).

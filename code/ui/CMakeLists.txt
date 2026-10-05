@@ -36,3 +36,10 @@ include_directories("../splines")
 # LIB
 add_library(${LIB_UI} SHARED ${SOURCES})
 set_target_properties(${LIB_UI} PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(${LIB_UI} PROPERTIES OUTPUT_NAME "ui_new")
+set_target_properties(${LIB_UI} PROPERTIES PREFIX "" SUFFIX ".so")
+
+# INSTALL
+install(TARGETS ${LIB_UI}
+        LIBRARY DESTINATION lib/vkq3ng
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)

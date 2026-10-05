@@ -1,0 +1,13 @@
+vkq3ng (1.0.0-1) unstable; urgency=medium
+
+  * Initial release of vkq3ng - Vulkan Quake 3 Next Generation engine
+  * Vulkan renderer with ray-tracing support
+  * Wayland native backend with X11 fallback
+  * SDL2 audio backend (replaces OSS)
+  * FSR-style render scaling
+  * Vendor-neutral GPU selection
+  * Multi-GPU compute offload stub
+  * AI denoiser / TSR / predictors stub
+  * io_uring file I/O (opt-in)
+
+ -- Chas Bigham <chasbigham@gmail.com>  Mon, 05 Oct 2026 00:00:00 +0000

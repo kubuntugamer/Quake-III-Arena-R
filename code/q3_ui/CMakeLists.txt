@@ -34,4 +34,11 @@ include_directories(${CMAKE_SOURCE_DIR}/code/game)
 # LIB
 add_library(${LIB_Q3UI} SHARED ${SOURCES})
 set_target_properties(${LIB_Q3UI} PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(${LIB_Q3UI} PROPERTIES OUTPUT_NAME "ui")
+set_target_properties(${LIB_Q3UI} PROPERTIES PREFIX "" SUFFIX ".so")
+
+# INSTALL
+install(TARGETS ${LIB_Q3UI}
+        LIBRARY DESTINATION lib/vkq3ng
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 

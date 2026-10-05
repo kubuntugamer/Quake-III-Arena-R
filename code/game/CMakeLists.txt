@@ -29,3 +29,10 @@ endforeach()
 # LIB
 add_library(${LIB_GAME} SHARED ${SOURCES})
 set_target_properties(${LIB_GAME} PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(${LIB_GAME} PROPERTIES OUTPUT_NAME "qagame")
+set_target_properties(${LIB_GAME} PROPERTIES PREFIX "" SUFFIX ".so")
+
+# INSTALL
+install(TARGETS ${LIB_GAME}
+        LIBRARY DESTINATION lib/vkq3ng
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)

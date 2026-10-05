@@ -1,0 +1,261 @@
+diff --git a/README.md b/README.md
+index 1234567..abcdefg 100644
+--- a/README.md
++++ b/README.md
+@@ -1,8 +1,8 @@
+-# Quake III Arena R — Linux / Vulkan / Ray Tracing
++# vkq3ng — Vulkan Quake 3 Next Generation
+ 
+-A Linux-focused fork of **Quake III Arena** that replaces the original OpenGL renderer with a
++A modern Vulkan engine for **Quake III Arena** that replaces the original OpenGL renderer with a
+ **Vulkan backend**, adds **hardware ray tracing** as an optional path, and keeps the classic
+ rasterized renderer available on GPUs that have no RT support.
+ 
+-This README documents the **current state of this fork**, what is verified, and what still needs
++This README documents the **current state of vkq3ng**, what is verified, and what still needs
+ testing. It is written to be machine-readable: every claim below is either backed by code in this
+ repository or explicitly flagged as unverified.
+ 
+@@ -44,8 +44,8 @@
+ 
+ ## Fork origin
+ 
+-This repository is a fork of the **ReForged** branch of Quake III Arena, which in turn descends
+-from the id Software source release published under the GPL on **20 August 2005**. That upstream
++This project descends from the **ReForged** branch of Quake III Arena, which in turn descends
++from the id Software source release published under the GPL on **20 August 2005**. That upstream
+ lineage is not ioquake3 — this fork builds from the original id source tree with the ReForged
+ refactor applied.
+ 
+@@ -127,24 +127,24 @@
+ 
+ ## Building on Linux
+ 
+-```bash
+-git clone https://github.com/kubuntugamer/Quake-III-Arena-R.git
+-cd Quake-III-Arena-R
++```bash
++git clone https://github.com/kubuntugamer/vkq3ng.git
++cd vkq3ng
+ git submodule update --init
+ 
+ cmake -S . -B build
+ cmake --build build -j"$(nproc)"
+ ```
+ 
+-The binary is written to `bin/Release/quake3` — a path relative to the repository root, not to
+-`build/`. `CMakeLists.txt` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`, so the output lands next to the source tree regardless of where you pointed the build directory.
++The binary is written to `bin/Release/vkq3ng` — a path relative to the repository root, not to
++`build/`. `CMakeLists.txt` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`, so the output lands next to the source tree regardless of where you pointed the build directory.
+ 
+ Notes:
+ 
+- The renderer CMake targets use `file(GLOB_RECURSE ...)`. If you add a **new** `.c` file you must
+-   re-run the `cmake -S . -B build` configure step, not just the build.
+- If the Vulkan SDK is installed in a non-standard prefix, point CMake at it:
+-   `cmake -S . -B build -DVULKAN_SDK=/path/to/sdk`.
+- A successful build should end with `[100%] Built target quake3`.
++ The renderer CMake targets use `file(GLOB_RECURSE ...)`. If you add a **new** `.c` file you must
++   re-run the `cmake -S . -B build` configure step, not just the build.
++ If the Vulkan SDK is installed in a non-standard prefix, point CMake at it:
++   `cmake -S . -B build -DVULKAN_SDK=/path/to/sdk`.
++ A successful build should end with `[100%] Built target vkq3ng`.
+ 
+ ---
+ 
+@@ -149,30 +149,30 @@
+ 
+ ## Running the game
+ 
+-```bash
+-cd bin/Release
+-./quake3 +set fs_basePath /path/to/your/quake3 +set sv_pure 0 \
+-         +set vm_game 0 +set vm_cgame 0 +set vm_ui 0
++```bash
++cd bin/Release
++./vkq3ng +set fs_basepath /path/to/your/quake3 +set sv_pure 0 \
++         +set vm_game 0 +set vm_cgame 0 +set vm_ui 0
+ ```
+ 
+-`fs_basePath` must point at the directory **containing** `baseq3/` and `missionpack/`, not at
+-`baseq3` itself. `FS_AddGameDirectory()` appends the game directory name, so pointing it at
++`fs_basepath` must point at the directory **containing** `baseq3/` and `missionpack/`, not at
++`baseq3` itself. `FS_AddGameDirectory()` appends the game directory name, so pointing it at
+ `baseq3` makes the engine look for `baseq3/baseq3` and fail with
+ `Couldn't load default.cfg`.
+ 
+-With no `fs_basePath`, the engine uses the current working directory as the install path and
+-`$HOME/.q3a` as the home path for saved configuration.
++With no `fs_basepath`, the engine uses the current working directory as the install path and
++`$HOME/.vkq3ng` as the home path for saved configuration.
+ 
+ ### First-run recommendations
+ 
+ ```bash
+-./quake3 +set fs_basePath /path/to/quake3 \
++./vkq3ng +set fs_basepath /path/to/quake3 \
+          +set r_fullscreen 1 \
+          +set r_mode 14 \
+          +set r_vertexLight 0
+ ```
+ 
+-`r_mode 14` means fullscreen at the current desktop resolution. Omit `r_mode` and pass
+-`+set r_fullscreen 0` for a windowed test run, which is the safer first attempt.
++`r_mode 14` means fullscreen at the current desktop resolution. Omit `r_mode` and pass
++`+set r_fullscreen 0` for a windowed test run, which is the safer first attempt.
+ 
+ ---
+ 
+@@ -179,20 +179,20 @@
+ 
+ ## Asset layout
+ 
+-This fork uses the standard modern source-port layout. Put the retail `.pk3` archives in
++This engine uses the standard modern source-port layout. Put the retail `.pk3` archives in
+ `<fs_basePath>/baseq3/`:
+ 
+ ```
+ <fs_basePath>/
+ ├── baseq3/
+ │   ├── pak0.pk3        ← required, from your own purchase
+ │   ├── pak1.pk3 … pak8.pk3
+ │   └── default.cfg
+-└── missionpack/        ← must exist; copy from baseq3 if your copy lacks it
++└── missionpack/        ← must exist; copy from baseq3 if your copy lacks it
+ ```
+ 
+-Notes that contradict older versions of this README:
++Notes that contradict older versions of this README:
+ 
+- **`blue_noise_textures` is only required for the ray tracing path.** It is loaded inside the
+-  `<RTX>` block in `code/renderer/tr_init.c` and consumed only by `code/renderer/tr_bsp.c`. Pure
++  `<RTX>` block in `code/renderer/tr_init.c` and consumed only by `code/renderer/tr_bsp.c`. Pure
+   rasterization does not read it. If you see a missing-blue-noise error you are running the RT path.
+- `missionpack/` is the Team Arena / Quake III Team Games map set. Create the directory even if you
+-  only play base Quake III; the engine probes it on startup.
++ `missionpack/` is the Team Arena / Quake III Team Games map set. Create the directory even if you
++   only play base Quake III; the engine probes it on startup.
+- `default.cfg` must be inside `pak0.pk3`. If the engine aborts with `Couldn't load default.cfg`,
+-  the base path is wrong or `pak0.pk3` is missing.
++ `default.cfg` must be inside `pak0.pk3`. If the engine aborts with `Couldn't load default.cfg`,
++   the base path is wrong or `pak0.pk3` is missing.
+ 
+ ---
+ 
+@@ -213,8 +213,8 @@
+ 
+ ```bash
+ # Rasterization
+-./quake3 +set r_vertexLight 0
++./vkq3ng +set r_vertexLight 0
+ 
+ # Ray tracing
+-./quake3 +set r_vertexLight 2
++./vkq3ng +set r_vertexLight 2
+ ```
+ 
+@@ -264,8 +264,8 @@
+ 
+ ```bash
+-./quake3 +set r_vertexLight 0 +set r_fsrScale 0.85
++./vkq3ng +set r_vertexLight 0 +set r_fsrScale 0.85
+ ```
+ 
+ Output on the console, verified working:
+ 
+@@ -356,8 +356,8 @@
+ 
+ If audio is silent or the wrong device is chosen:
+ 
+ ```bash
+-SDL_AUDIODRIVER=alsa ./quake3      # bypass PipeWire/PulseAudio
+-SDL_AUDIODRIVER=pulseaudio ./quake3
++SDL_AUDIODRIVER=alsa ./vkq3ng      # bypass PipeWire/PulseAudio
++SDL_AUDIODRIVER=pulseaudio ./vkq3ng
+ ```
+ 
+ ---
+@@ -441,8 +441,8 @@
+ 
+ | Cvar | Default | Description |
+ |---|---|---|
+-| `fs_basePath` | engine default | Directory **containing** `baseq3/` |
+-| `fs_homePath` | `$HOME/.q3a` | Saved config location |
++| `fs_basepath` | engine default | Directory **containing** `baseq3/` |
++| `fs_homepath` | `$HOME/.vkq3ng` | Saved config location |
+ | `sv_pure` | `1` | Pure-server restrictions; set `0` for local play |
+ | `vm_game` / `vm_cgame` / `vm_ui` | `1` | Enable VMs; set `0` alongside `sv_pure 0` |
+ | `fs_useUring` | `0` | `io_uring` synchronous reads |
+@@ -576,12 +576,12 @@
+ 
+ **`failed to find a suitable GPU!`**
+ No enumerated device passed `VK_CheckDeviceExtensionSupport`. Run `vulkaninfo --summary` to confirm
+-the loader sees your GPU. Note that setting `VK_ICD_FILENAMES` restricts enumeration to a single
++the loader sees your GPU. Note that setting `VK_ICD_FILENAMES` restricts enumeration to a single
+ driver; unset it.
+ 
+ **`Couldn't load default.cfg`**
+-`fs_basePath` points at the wrong level. It must be the parent of `baseq3/`, not `baseq3` itself.
++`fs_basepath` points at the wrong level. It must be the parent of `baseq3/`, not `baseq3` itself.
+ 
+ **`no second GPU for compute` in the log**
+ Expected on a single-GPU system, or on an Intel UHD/Iris Xe + NVIDIA combination where the iGPU
+@@ -588,8 +588,8 @@
+ The RT path requires `blue_noise_textures/` in `baseq3/`. If it is absent the engine does **not**
+ print a warning — `R_LoadImage16()` returns a NULL pointer and `tr_init.c` dereferences it
+ immediately, so you get a segfault with no useful message. Copy the folder into `baseq3/`, or run
+-with `r_vertexLight 0`.
++with `r_vertexLight 0`.
+ 
+ **No sound**
+-Try `SDL_AUDIODRIVER=alsa` or `SDL_AUDIODRIVER=pulseaudio`.
++Try `SDL_AUDIODRIVER=alsa ./vkq3ng` or `SDL_AUDIODRIVER=pulseaudio ./vkq3ng`.
+ 
+ **Runs but renders black under Wayland**
+-Force X11: `WAYLAND_DISPLAY= ./quake3`.
++Force X11: `WAYLAND_DISPLAY= ./vkq3ng`.
+ 
+ **Adding a new source file had no effect**
+ The renderer CMake targets glob sources. Re-run `cmake -S . -B build`.
+@@ -603,8 +603,8 @@
+ 
+ ## Repository layout
+ 
+-```
+-code/
++```
++vkq3ng/
+ ├── client/            Client-side logic, prediction
+ ├── server/            Game server (sv_*)
+ ├── game/              Shared game logic (bg_*)
+@@ -632,20 +632,8 @@
+ 
+ ### Compiling on Windows
+ 
+-Not maintained by this fork. Use the provided `bat` file to generate a Visual Studio project, and
+-point `fs_basePath` at a directory containing the game data.
++Not maintained by this project. Use the provided `bat` file to generate a Visual Studio project, and
++point `fs_basepath` at a directory containing the game data.
+ 
+ ---
+ 
+-## Screenshots
+-
+-| | |
+-|:-------------------------:|:-------------------------:|
+-| ![](images/scene_lava.png) | ![](images/scene_statue.png) |
+-| ![](images/q3rt.png) | ![](images/q3rt2.png) |
+-| ![](images/glass.png) | ![](images/glass2.png) |
+-
+-Classic Quake III on the left, ray traced on the right.
+-![](images/q3origvsrt.png)
+-
+---
++**Project name:** vkq3ng (Vulkan Quake 3 Next Generation)
++**Binary:** `vkq3ng`
++**Config directory:** `~/.vkq3ng/`
++**System data directory:** `/usr/share/games/vkq3ng/`
++**Library directory:** `/usr/lib/vkq3ng/`
++**PPA:** `ppa:chasbigham/vkq3ng`
++**GitHub:** `https://github.com/kubuntugamer/vkq3ng`
++**License:** GPL-2.0-only (engine), proprietary (game data)

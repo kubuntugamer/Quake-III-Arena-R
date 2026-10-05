@@ -1,0 +1,75 @@
+#!/bin/sh
+# vkq3ng launcher - Vulkan Quake 3 Next Generation
+# Auto-detects Steam, GOG, Flatpak, and system package installs
+
+# Library path for game modules (cgame, qagame, ui)
+export LD_LIBRARY_PATH="@CMAKE_INSTALL_PREFIX@/lib/vkq3ng:${LD_LIBRARY_PATH}"
+
+# Home path for user config, mods, screenshots, demos (always first priority)
+HOMEPATH="${HOME}/.vkq3ng"
+
+# Build basepath list: user config → system package → Steam → GOG → Flatpak
+# Engine searches in order; first match wins for each pak file
+BASEPATHS=""
+
+# 1. User-writable config directory (mods, custom maps take priority)
+BASEPATHS="${HOMEPATH}"
+
+# 2. System package location (read-only, installed by .deb)
+BASEPATHS="${BASEPATHS}+@CMAKE_INSTALL_PREFIX@/@Q3_DATADIR@"
+
+# 3. Steam (Linux native) - common install locations
+for p in \
+    "${HOME}/.steam/steam/steamapps/common/Quake III Arena" \
+    "${HOME}/.local/share/Steam/steamapps/common/Quake III Arena" \
+    "${HOME}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/Quake III Arena" \
+    "/var/lib/flatpak/app/com.valvesoftware.Steam/current/active/files/steamapps/common/Quake III Arena" \
+    "/mnt/steam/steamapps/common/Quake III Arena" \
+    "/media/steam/steamapps/common/Quake III Arena"; do
+    if [ -d "${p}/baseq3" ] && [ -f "${p}/baseq3/pak0.pk3" ]; then
+        BASEPATHS="${BASEPATHS}+${p}"
+    fi
+done
+
+# 4. GOG - common install locations
+for p in \
+    "${HOME}/GOG Games/Quake III Arena" \
+    "${HOME}/.local/share/gog/quake3" \
+    "/opt/gog/quake3" \
+    "/mnt/games/GOG/Quake III Arena" \
+    "/media/gog/Quake III Arena"; do
+    if [ -d "${p}/baseq3" ] && [ -f "${p}/baseq3/pak0.pk3" ]; then
+        BASEPATHS="${BASEPATHS}+${p}"
+    fi
+done
+
+# 5. Flatpak (if Quake3 itself is distributed as Flatpak)
+for p in \
+    "${HOME}/.var/app/io.github.kubuntugamer.Quake3/data/quake3" \
+    "${HOME}/.local/share/flatpak/app/io.github.kubuntugamer.Quake3/current/active/files/quake3"; do
+    if [ -d "${p}/baseq3" ] && [ -f "${p}/baseq3/pak0.pk3" ]; then
+        BASEPATHS="${BASEPATHS}+${p}"
+    fi
+done
+
+# 6. Common secondary Steam libraries (SteamLibrary folders on other drives)
+if command -v find >/dev/null 2>&1; then
+    for lib in $(find /mnt /media /home -maxdepth 3 -name "SteamLibrary" -type d 2>/dev/null); do
+        p="${lib}/steamapps/common/Quake III Arena"
+        if [ -d "${p}/baseq3" ] && [ -f "${p}/baseq3/pak0.pk3" ]; then
+            BASEPATHS="${BASEPATHS}+${p}"
+        fi
+    done
+fi
+
+# Create home directory structure
+mkdir -p "${HOMEPATH}/baseq3"
+mkdir -p "${HOMEPATH}/demos"
+mkdir -p "${HOMEPATH}/screenshots"
+
+# Launch the engine
+exec "@CMAKE_INSTALL_PREFIX@/bin/vkq3ng.engine" \
+     +set fs_basepath "${BASEPATHS}" \
+     +set fs_homepath "${HOMEPATH}" \
+     +set fs_cdpath "${BASEPATHS}" \
+     "$@"
