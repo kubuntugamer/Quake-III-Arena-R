@@ -133,7 +133,8 @@ cmake -S . -B build
 cmake --build build -j"$(nproc)"
 ```
 
-The binary is written to `build/bin/Release/quake3`.
+The binary is written to `bin/Release/quake3` — a path relative to the repository root, not to
+`build/`. `CMakeLists.txt` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`, so the output lands next to the source tree regardless of where you pointed the build directory.
 
 Notes:
 
@@ -148,7 +149,7 @@ Notes:
 ## Running the game
 
 ```bash
-cd build/bin/Release
+cd bin/Release
 ./quake3 +set fs_basePath /path/to/your/quake3 +set sv_pure 0 \
          +set vm_game 0 +set vm_cgame 0 +set vm_ui 0
 ```
