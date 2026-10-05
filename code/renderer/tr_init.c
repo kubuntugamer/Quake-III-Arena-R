@@ -97,6 +97,7 @@ cvar_t	*r_drawBuffer;
 cvar_t	*r_lightmap;
 cvar_t	*r_vertexLight;
 cvar_t	*r_rtx;
+cvar_t	*r_fsrScale;
 cvar_t	*r_uiFullScreen;
 cvar_t	*r_shadows;
 cvar_t	*r_flares;
@@ -1171,6 +1172,7 @@ void R_Register( void )
 	r_simpleMipMaps = ri.Cvar_Get( "r_simpleMipMaps", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_vertexLight = ri.Cvar_Get( "r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_rtx = ri.Cvar_Get("r_rtx", "0", CVAR_ARCHIVE | CVAR_LATCH);
+	r_fsrScale = ri.Cvar_Get("r_fsrScale", "0", CVAR_ARCHIVE | CVAR_LATCH);
 	r_uiFullScreen = ri.Cvar_Get( "r_uifullscreen", "0", 0);
 	r_subdivisions = ri.Cvar_Get ("r_subdivisions", "4", CVAR_ARCHIVE | CVAR_LATCH);
 	
@@ -1621,6 +1623,8 @@ void RE_Shutdown( qboolean destroyWindow ) {
 				if (vk_d.bottomASDynamicList[i] == NULL) free(vk_d.bottomASDynamicList[i]);
 			}
 			// </RTX>
+			
+			VK_FSRShutdown();
 			
 			VK_DestroyAllPipelines();
 			VK_DestroyAllShaders();

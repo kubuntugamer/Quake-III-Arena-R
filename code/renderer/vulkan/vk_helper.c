@@ -44,10 +44,19 @@ void VK_BeginRenderClear()
 
 	VkRenderPassBeginInfo rpBeginInfo = {0};
 	rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	rpBeginInfo.renderPass = vk.swapchain.renderpass;
-	rpBeginInfo.framebuffer = vk.swapchain.CurrentFramebuffer();
-	rpBeginInfo.renderArea.extent.width = vk.swapchain.extent.width;
-	rpBeginInfo.renderArea.extent.height = vk.swapchain.extent.height;
+	if (VK_FSRActive()) {
+		// render scale: draw into the low resolution offscreen target instead
+		VkExtent2D fsrExtent = VK_FSRExtent();
+		rpBeginInfo.renderPass = VK_FSRRenderPass();
+		rpBeginInfo.framebuffer = VK_FSRFramebuffer();
+		rpBeginInfo.renderArea.extent.width = fsrExtent.width;
+		rpBeginInfo.renderArea.extent.height = fsrExtent.height;
+	} else {
+		rpBeginInfo.renderPass = vk.swapchain.renderpass;
+		rpBeginInfo.framebuffer = vk.swapchain.CurrentFramebuffer();
+		rpBeginInfo.renderArea.extent.width = vk.swapchain.extent.width;
+		rpBeginInfo.renderArea.extent.height = vk.swapchain.extent.height;
+	}
 	rpBeginInfo.clearValueCount = 2;//m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 	rpBeginInfo.pClearValues = clearValues;
 
@@ -72,7 +81,12 @@ void beginRender()
 void VK_EndRender()
 {
 	vkCmdEndRenderPass(vk.swapchain.CurrentCommandBuffer());
-	
+
+	// render scale: upscale the low resolution image into the swapchain image
+	if (VK_FSRActive()) {
+		VK_FSRUpscale(vk.swapchain.images[vk.swapchain.currentImage]);
+	}
+
 	//if(vk_d.drawMirror == qfalse) VK_CopyImageToSwapchain(&vk_d.accelerationStructures.resultImage);
 
 }

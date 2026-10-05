@@ -249,8 +249,12 @@ void VK_BindPipeline(vkpipeline_t* pipeline) {
 void VK_Draw(int count)
 {
     VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
-	vkCmdSetViewport(commandBuffer, 0, 1, &vk_d.viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &vk_d.scissor);
+	// render scale: window space viewport/scissor -> render target space
+	VkViewport viewport = vk_d.viewport;
+	VkRect2D scissor = vk_d.scissor;
+	VK_FSRScaleViewport(&viewport, &scissor);
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 	vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
     vkCmdDraw(commandBuffer, count, 1, 0, 0);
 }
@@ -259,8 +263,12 @@ void VK_DrawIndexed(vkbuffer_t *idxBuffer, int count, uint32_t firstIndex, uint3
 {
 	//return;
 	VkCommandBuffer commandBuffer = vk.swapchain.commandBuffers[vk.swapchain.currentImage];
-	vkCmdSetViewport(commandBuffer, 0, 1, &vk_d.viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &vk_d.scissor);
+	// render scale: window space viewport/scissor -> render target space
+	VkViewport viewport = vk_d.viewport;
+	VkRect2D scissor = vk_d.scissor;
+	VK_FSRScaleViewport(&viewport, &scissor);
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 	if (vk_d.polygonOffset)
 	{
 		vkCmdSetDepthBias(commandBuffer, r_offsetUnits->value, 0.0f, r_offsetFactor->value - 3);

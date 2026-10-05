@@ -106,6 +106,7 @@ PFN_vkCmdClearAttachments                       vkCmdClearAttachments;
 PFN_vkCmdSetDepthBias                           vkCmdSetDepthBias;
 PFN_vkCmdSetBlendConstants                      vkCmdSetBlendConstants;
 PFN_vkCmdCopyImage								vkCmdCopyImage;
+PFN_vkCmdBlitImage								vkCmdBlitImage;
 PFN_vkCmdDispatch								vkCmdDispatch;
 PFN_vkCmdWriteTimestamp							vkCmdWriteTimestamp;
 PFN_vkCmdBeginDebugUtilsLabelEXT				vkCmdBeginDebugUtilsLabelEXT;
@@ -284,6 +285,7 @@ qboolean VK_LoadDeviceFunctions(void)
     VK_DEVICE_LEVEL_FUNCTION(vkCmdSetDepthBias, "vkCmdSetDepthBias");
     VK_DEVICE_LEVEL_FUNCTION(vkCmdSetBlendConstants, "vkCmdSetBlendConstants");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdCopyImage, "vkCmdCopyImage");
+	VK_DEVICE_LEVEL_FUNCTION(vkCmdBlitImage, "vkCmdBlitImage");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdDispatch, "vkCmdDispatch");
 	VK_DEVICE_LEVEL_FUNCTION(vkCmdWriteTimestamp, "vkCmdWriteTimestamp");
 #ifndef NDEBUG

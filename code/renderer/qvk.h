@@ -171,6 +171,7 @@ extern PFN_vkCmdClearAttachments                       vkCmdClearAttachments;
 extern PFN_vkCmdSetDepthBias                           vkCmdSetDepthBias;
 extern PFN_vkCmdSetBlendConstants                      vkCmdSetBlendConstants;
 extern PFN_vkCmdCopyImage								vkCmdCopyImage;
+extern PFN_vkCmdBlitImage								vkCmdBlitImage;
 extern PFN_vkCmdDispatch								vkCmdDispatch;
 extern PFN_vkCmdWriteTimestamp							vkCmdWriteTimestamp;
 extern PFN_vkCmdBeginDebugUtilsLabelEXT				vkCmdBeginDebugUtilsLabelEXT;

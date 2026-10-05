@@ -64,6 +64,9 @@ void VK_SetupSwapchain()
 		vkSetLatencySleepModeNV(vk.device, vk.swapchain.handle, &sleepMode);
 		ri.Printf(PRINT_ALL, "...NVIDIA Reflex sleep mode on (boost on)\n");
 	}
+
+	// render scale upscale for the raster path, needs the final swapchain extent
+	VK_InitFSR();
 }
 
 // Idle + rebuild the swapchain (same window). Enough when only the present

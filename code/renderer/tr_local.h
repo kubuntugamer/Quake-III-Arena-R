@@ -1773,6 +1773,7 @@ extern	cvar_t	*r_offsetUnits;
 extern	cvar_t	*r_fullbright;					// avoid lightmap pass
 extern	cvar_t	*r_lightmap;					// render lightmaps only
 extern	cvar_t	*r_vertexLight;					// vertex lighting mode for better performance
+extern	cvar_t	*r_fsrScale;					// internal render scale + upscale (0 = off)
 extern	cvar_t	*r_uiFullScreen;				// ui is running fullscreen
 
 extern	cvar_t	*r_logFile;						// number of frames to emit GL logs
@@ -1932,6 +1933,17 @@ void VK_UploadBufferData(vkbuffer_t* buffer, const byte* data);
 void VK_DestroySwapchain();
 void VK_SetupSwapchain();
 qboolean VK_RecreateSwapchain(void);
+void VK_CreateFramebuffer(vkframebuffer_t* framebuffer, VkExtent2D extent, VkFormat format);
+void VK_BeginFramebuffer(vkframebuffer_t* framebuffer);
+void VK_EndFramebuffer(vkframebuffer_t* framebuffer);
+qboolean VK_InitFSR(void);
+qboolean VK_FSRActive(void);
+VkRenderPass VK_FSRRenderPass(void);
+VkFramebuffer VK_FSRFramebuffer(void);
+VkExtent2D VK_FSRExtent(void);
+void VK_FSRShutdown(void);
+void VK_FSRScaleViewport(VkViewport* viewport, VkRect2D* scissor);
+void VK_FSRUpscale(VkImage swapchainImage);
 void VK_CreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t *bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
 void VK_UpdateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* oldBas, vkbottomAS_t* newBas, vkbuffer_t* bottomASBuffer, VkDeviceSize* offset, VkBuildAccelerationStructureFlagsKHR flag);
 void VK_RecreateBottomAS(VkCommandBuffer commandBuffer, vkbottomAS_t* bas, vkbuffer_t* bottomASBuffer, VkBuildAccelerationStructureFlagsKHR flag);
