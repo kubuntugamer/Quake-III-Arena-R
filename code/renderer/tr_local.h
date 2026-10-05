@@ -1934,6 +1934,7 @@ void VK_DestroySwapchain();
 void VK_SetupSwapchain();
 qboolean VK_RecreateSwapchain(void);
 void VK_CreateFramebuffer(vkframebuffer_t* framebuffer, VkExtent2D extent, VkFormat format);
+qboolean VK_RayTracingActive(void);
 void VK_BeginFramebuffer(vkframebuffer_t* framebuffer);
 void VK_EndFramebuffer(vkframebuffer_t* framebuffer);
 qboolean VK_InitFSR(void);

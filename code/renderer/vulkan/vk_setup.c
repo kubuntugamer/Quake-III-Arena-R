@@ -4,15 +4,32 @@
 vkinstance_t vk;
 vkdata_t     vk_d;
 
+// Needed to present anything at all.
 static const char* requiredDeviceExtensions[] = {
 #if defined( _WIN32 ) || defined( __linux__ )
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
 #endif
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
+
+// Needed only by the raytracing path. Requiring these unconditionally meant a
+// GPU without RT support was rejected as a candidate even when running pure
+// rasterization, so r_vertexLight 0 plus r_fsrScale could not run on it.
+static const char* rayTracingDeviceExtensions[] = {
+#if defined( _WIN32 ) || defined( __linux__ )
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+#endif
+};
+
+// Is the raytracing renderer actually being used? Single source of truth for the
+// setup-time gating of RT extensions, features and entry points.
+qboolean VK_RayTracingActive( void )
+{
+	return ( r_vertexLight != NULL && r_vertexLight->integer == 2 );
+}
+
 
 // Enabled when the driver offers them (queried per physical device, never fatal).
 // AMD vendor set: only anti_lag/coherent/core-props are actively used; the
@@ -341,6 +358,12 @@ static void VK_PickPhysicalDevice()
 
 	free(devices);
 
+	// The second GPU only serves raytracing compute, so there is no point
+	// enumerating for one when RT is off.
+	if (!VK_RayTracingActive()) {
+		next = VK_NULL_HANDLE;
+	}
+
 	// Never hand raytracing a CPU device - a software Vulkan target is far slower
 	// than simply staying single-GPU.
 	if (next != VK_NULL_HANDLE) {
@@ -412,8 +435,14 @@ static void VK_PickPhysicalDevice()
 	vk.rayTracingProperties.pNext = NULL;
 	vk.deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 	vk.deviceProperties2.pNext = &vk.amdCoreProperties;
-	vk.amdCoreProperties.pNext = &vk.accelProperties;
-	vk.accelProperties.pNext = &vk.rayTracingProperties;
+
+	// Querying the RT property structs for a device without the RT extensions is
+	// invalid usage, so leave them out of the chain when RT is off.
+	if (VK_RayTracingActive()) {
+		vk.amdCoreProperties.pNext = &vk.accelProperties;
+		vk.accelProperties.pNext = &vk.rayTracingProperties;
+	}
+
 	vkGetPhysicalDeviceProperties2(vk.physicalDevice, &vk.deviceProperties2);
 	vk.amdComputeUnits = vk.amdCoreProperties.activeComputeUnitCount;
 
@@ -476,11 +505,14 @@ static void VK_CreateLogicalDevice()
 	rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
 	rayTracingPipelineFeatures.rayTracingPipeline = qtrue;
 	rayTracingPipelineFeatures.pNext = &accelerationStructureFeatures;
-
+	// Present-id/wait features also chain onward, so splice the RT feature
+	// structs in only when RT is on. Naming a feature struct for an extension the
+	// device lacks is invalid usage and fails vkCreateDevice.
 	VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures = { 0 };
 	presentIdFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
 	presentIdFeatures.presentId = vk.presentId;
-	presentIdFeatures.pNext = &rayTracingPipelineFeatures;
+	presentIdFeatures.pNext = VK_RayTracingActive() ? (VkPhysicalDeviceFeatures2 *)&rayTracingPipelineFeatures
+	                                                : (VkPhysicalDeviceFeatures2 *)&vulkan12Features;
 
 	VkPhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures = { 0 };
 	presentWaitFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
@@ -719,6 +751,15 @@ static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device) {
 			return qfalse;
 		}
 	}
+
+	// RT extensions are only a requirement when the RT renderer is in use.
+	if (VK_RayTracingActive()) {
+		for (int i = 0; i < (int)(sizeof(rayTracingDeviceExtensions) / sizeof(rayTracingDeviceExtensions[0])); i++) {
+			if (!VK_HasDeviceExtension(device, rayTracingDeviceExtensions[i])) {
+				return qfalse;
+			}
+		}
+	}
 	return qtrue;
 }
 
@@ -728,6 +769,13 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
 	enabledDeviceExtensionCount = 0;
 	for (int i = 0; i < (int)(sizeof(requiredDeviceExtensions) / sizeof(requiredDeviceExtensions[0])); i++) {
 		enabledDeviceExtensions[enabledDeviceExtensionCount++] = requiredDeviceExtensions[i];
+	}
+	// Only enable RT extensions when RT is in use - enabling an extension the
+	// device does not support makes vkCreateDevice fail.
+	if (VK_RayTracingActive()) {
+		for (int i = 0; i < (int)(sizeof(rayTracingDeviceExtensions) / sizeof(rayTracingDeviceExtensions[0])); i++) {
+			enabledDeviceExtensions[enabledDeviceExtensionCount++] = rayTracingDeviceExtensions[i];
+		}
 	}
 	vk.rtMaintenance1 = qfalse;
 	vk.rtPositionFetch = qfalse;

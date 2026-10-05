@@ -333,15 +333,22 @@ qboolean VK_LoadDeviceFunctions(void)
 
 	/*
 	** KHR Ray Tracing
+	**
+	** Only resolved when the RT renderer is in use. VK_LOAD_FN returns qfalse on
+	** a NULL pointer, so loading these unconditionally aborted VK_Setup on any
+	** device without RT support - which is exactly what the raster path needs to
+	** run on. vkGetBufferDeviceAddress is core in 1.2, so it stays outside.
 	*/
-	VK_DEVICE_LEVEL_FUNCTION(vkCreateAccelerationStructureKHR, "vkCreateAccelerationStructureKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkDestroyAccelerationStructureKHR, "vkDestroyAccelerationStructureKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkGetAccelerationStructureBuildSizesKHR, "vkGetAccelerationStructureBuildSizesKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkGetAccelerationStructureDeviceAddressKHR, "vkGetAccelerationStructureDeviceAddressKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkCmdBuildAccelerationStructuresKHR, "vkCmdBuildAccelerationStructuresKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkCreateRayTracingPipelinesKHR, "vkCreateRayTracingPipelinesKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR");
-	VK_DEVICE_LEVEL_FUNCTION(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
+	if (VK_RayTracingActive()) {
+		VK_DEVICE_LEVEL_FUNCTION(vkCreateAccelerationStructureKHR, "vkCreateAccelerationStructureKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkDestroyAccelerationStructureKHR, "vkDestroyAccelerationStructureKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkGetAccelerationStructureBuildSizesKHR, "vkGetAccelerationStructureBuildSizesKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkGetAccelerationStructureDeviceAddressKHR, "vkGetAccelerationStructureDeviceAddressKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkCmdBuildAccelerationStructuresKHR, "vkCmdBuildAccelerationStructuresKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkCreateRayTracingPipelinesKHR, "vkCreateRayTracingPipelinesKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR");
+		VK_DEVICE_LEVEL_FUNCTION(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
+	}
 	VK_DEVICE_LEVEL_FUNCTION(vkGetBufferDeviceAddress, "vkGetBufferDeviceAddress");
 	/* present_wait is optional: resolve tolerantly (pacing checks the flag + pointer) */
 	*(void**)&vkWaitForPresentKHR = (void*)vkGetDeviceProcAddr(vk.device, "vkWaitForPresentKHR");
