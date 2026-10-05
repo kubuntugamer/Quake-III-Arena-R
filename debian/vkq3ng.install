@@ -3,4 +3,4 @@ usr/bin/vkq3ng.engine
 usr/lib/vkq3ng/*.so
 usr/share/applications/vkq3ng.desktop
 usr/share/pixmaps/vkq3ng.png
-usr/share/man/man6/vkq3ng.6.gz
+usr/share/man/man6/vkq3ng.6

@@ -22,16 +22,19 @@ override_dh_auto_configure:
 # Override dh_auto_install to handle our custom layout
 override_dh_auto_install:
 	dh_auto_install
-	# Install desktop entry and icon
+	# Install desktop entry and icon to debian/tmp for dh_install to pick up
 	install -D -m 644 debian/vkq3ng.desktop \
-		debian/vkq3ng/usr/share/applications/vkq3ng.desktop
+		debian/tmp/usr/share/applications/vkq3ng.desktop
 	install -D -m 644 debian/vkq3ng.png \
-		debian/vkq3ng/usr/share/pixmaps/vkq3ng.png
+		debian/tmp/usr/share/pixmaps/vkq3ng.png
+	# Install man page
+	install -D -m 644 debian/vkq3ng.6 \
+		debian/tmp/usr/share/man/man6/vkq3ng.6
 	# Create baseq3 directory structure
 	mkdir -p debian/vkq3ng-data/usr/share/games/vkq3ng/baseq3
 	# Create server symlink
-	mkdir -p debian/vkq3ng-server/usr/bin
-	ln -sf vkq3ng debian/vkq3ng-server/usr/bin/vkq3ng-server
+	mkdir -p debian/tmp/usr/bin
+	ln -sf vkq3ng debian/tmp/usr/bin/vkq3ng-server
 
 # Don't strip debug symbols from the engine (useful for crash reports)
 override_dh_strip:

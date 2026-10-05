@@ -24,6 +24,9 @@ endforeach()
 add_executable(${TOOL_Q3ASM} ${SOURCES})
 set_target_properties(${TOOL_Q3ASM} PROPERTIES LINKER_LANGUAGE C)
 
+# Disable -Werror for q3asm as it's an older tool with warnings we can't easily fix
+target_compile_options(${TOOL_Q3ASM} PRIVATE -Wno-error=format-overflow -Wno-error=implicit-function-declaration -Wno-error=format-security)
+
 # INSTALL
 install(TARGETS ${TOOL_Q3ASM}
         RUNTIME DESTINATION lib/vkq3ng
