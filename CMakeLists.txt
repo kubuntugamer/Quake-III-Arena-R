@@ -71,8 +71,28 @@ endif()
 set(LIB_RENDERER renderer)
 
 # OUTPUT DIR - only set defaults for non-packaging builds
-if(NOT CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  # Packaging build (e.g., dpkg-buildpackage) - use CMAKE_INSTALL_PREFIX
+#
+# Whether this is a packaging build is inferred from an explicitly supplied
+# CMAKE_INSTALL_PREFIX (which is how dpkg-buildpackage invokes us, see
+# debian/rules), but the answer is cached rather than re-derived.
+#
+# It has to be cached: the prefix gets FORCE-set to /usr below, and once that
+# lands in the cache CMake reports CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT as
+# false. Re-deriving from it therefore flipped local development builds from
+# ./bin/ into the build tree on the second `cmake` run, silently relocating
+# vkq3ng.engine. Pass -DVKQ3NG_PACKAGE_BUILD=ON/OFF to decide explicitly.
+if(NOT DEFINED VKQ3NG_PACKAGE_BUILD)
+  if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(VKQ3NG_PACKAGE_BUILD OFF CACHE BOOL "Build for packaging (honour CMAKE_INSTALL_PREFIX for output locations)")
+  else()
+    set(VKQ3NG_PACKAGE_BUILD ON CACHE BOOL "Build for packaging (honour CMAKE_INSTALL_PREFIX for output locations)")
+  endif()
+endif()
+
+if(VKQ3NG_PACKAGE_BUILD)
+  # Packaging build (e.g., dpkg-buildpackage) - leave the output directories
+  # alone so everything lands in the build tree.
+  message(STATUS "Output directories: build tree (packaging build)")
 else()
   # Local development build - use source-relative bin/
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
@@ -86,6 +106,8 @@ else()
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin/Release")
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin/Release")
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin/Release")
+
+  message(STATUS "Output directories: ${CMAKE_SOURCE_DIR}/bin (development build)")
 endif()
 
 # Installation prefix for packaging

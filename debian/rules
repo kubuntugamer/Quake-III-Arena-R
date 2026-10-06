@@ -13,10 +13,16 @@ DEB_BUILD_OPTIONS += parallel=$(shell nproc)
 	dh $@ --buildsystem=cmake --builddirectory=build
 
 # Override dh_auto_configure to pass custom CMake options
+#
+# VKQ3NG_PACKAGE_BUILD=ON is passed explicitly rather than left to CMake's
+# prefix inference: this build shares the "build" directory with local
+# development builds, and an explicit value is not affected by whatever
+# decision that directory cached earlier.
 override_dh_auto_configure:
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DVKQ3NG_PACKAGE_BUILD=ON \
 		-DQ3_VM_DYNAMIC=ON
 
 # Override dh_auto_install to handle our custom layout

@@ -133,18 +133,28 @@ cmake -S . -B build
 cmake --build build -j"$(nproc)"
 ```
 
-The executable is named `vkq3ng.engine` (`OUTPUT_NAME` in `code/unix/CMakeLists.txt`). On a
-first configure it is written to `bin/Release/` in the source tree, because `CMakeLists.txt`
-sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`.
+The executable is named `vkq3ng.engine` (`OUTPUT_NAME` in `code/unix/CMakeLists.txt`). A
+development build writes it to `bin/Release/` in the source tree; a packaging build leaves it
+in the build tree.
 
-That location is not stable across re-configures. `CMakeLists.txt` branches on
-`CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` and then `FORCE`-sets the prefix to `/usr`, so
-once `/usr` is in the CMake cache the branch is false and later `cmake -S . -B build` runs put
-the binary in the build tree instead. Check both:
+Which one you get is decided once and cached as `VKQ3NG_PACKAGE_BUILD`, so it no longer
+changes when you re-run `cmake`. It defaults to OFF unless an explicit `CMAKE_INSTALL_PREFIX`
+was supplied. Configure prints which:
+
+```
+-- Output directories: /path/to/Quake-III-Arena-R/bin (development build)
+-- Output directories: build tree (packaging build)
+```
+
+Override it explicitly if you need to:
 
 ```bash
-ls bin/Release/vkq3ng.engine build/code/unix/vkq3ng.engine 2>/dev/null
+cmake -S . -B build -DVKQ3NG_PACKAGE_BUILD=OFF   # development, bin/Release/
+cmake -S . -B build -DVKQ3NG_PACKAGE_BUILD=ON    # packaging, build tree
 ```
+
+A build directory that was configured before this decision was cached may have latched the
+wrong value. Delete `build/` and reconfigure, or pass the flag.
 
 Notes:
 
@@ -158,8 +168,8 @@ Notes:
 
 ## Running the game
 
-From a Debian install, `vkq3ng` is on your `PATH`. From a source build, the binary is
-`vkq3ng.engine` at whichever of the two locations above it ended up in.
+From a Debian install, `vkq3ng` is on your `PATH`. From a development source build the binary
+is `vkq3ng.engine` in `bin/Release/`.
 
 ```bash
 vkq3ng +set fs_basePath /path/to/your/quake3 +set sv_pure 0 \
