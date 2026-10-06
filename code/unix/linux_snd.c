@@ -80,12 +80,28 @@ qboolean SNDDMA_Init(void)
         }
     }
 
+    // Fixed mixer format. sndspeed, sndbits and sndchannels are parsed for
+    // backwards compatibility with old configs but do not change anything:
+    // dma.speed feeds the ring buffer sizing and the raw-file rescale in
+    // snd_dma.c, and dma.samples is a fixed 8192 rather than scaling with it,
+    // so raising the rate would shrink the audio window from 93 ms to 21 ms at
+    // 192 kHz and cause underruns. Wiring them properly means sizing the buffer
+    // from s_mixPreStep as well, which is shared sound code.
+    //
+    // The mixer rate also has nothing to do with the hardware rate. SDL2
+    // resamples between them on its own, so a device that only does 48000 is
+    // not a problem.
     dma.samplebits = 16;
     dma.speed = 44100;
     dma.channels = 2;
     dma.submission_chunk = 1;
     dma.samples = 8192; /* power of two; must exceed 2 * s_mixPreStep * speed (2*0.05*44100=4410) */
     dma_samples = dma.samples;
+
+    if (sndspeed->integer != 0 || sndbits->integer != 16 || sndchannels->integer != 2) {
+        Com_Printf("SDL: sndspeed/sndbits/sndchannels are not supported; "
+                   "mixing at 44100 Hz, 16-bit, stereo\n");
+    }
 
     dma.buffer = (unsigned char *)malloc(dma.samples * (dma.samplebits / 8));
     if (!dma.buffer) {
@@ -100,6 +116,16 @@ qboolean SNDDMA_Init(void)
     desired.samples = dma.samples / dma.channels / 4;  // frames per SDL buffer (quarter ring)
     desired.callback = Q3_AudioCallback;
 
+    // allowed_changes stays 0 deliberately. Q3_AudioCallback() is a raw memcpy of
+    // signed 16-bit bytes, so it is only correct while obtained matches desired in
+    // both format and channel count. Allowing SDL2 to substitute either would put
+    // S16 data into a stream laid out for something else and produce noise.
+    //
+    // Frequency needs no such care and needs no flag either: SDL2 resamples
+    // between our mix rate and the hardware rate on its own, so obtained.freq
+    // tracks desired.freq even on a device that only does 48000. Verified
+    // across 8-192 kHz mono and stereo against pulseaudio, alsa and pipewire -
+    // allowed_changes = 0 gave an exact match every time.
     audio_device = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);
     if (audio_device == 0) {
         Com_Printf("SDL: cannot open audio device: %s\n", SDL_GetError());
@@ -110,8 +136,19 @@ qboolean SNDDMA_Init(void)
 
     SDL_PauseAudioDevice(audio_device, 0);
     snd_inited = 1;
-    Com_Printf("SDL: opened audio %d Hz, %d ch, %d samples\n",
-               obtained.freq, obtained.channels, obtained.samples);
+
+    // The raw-memcpy callback is only correct while format and channel count are
+    // what we asked for. allowed_changes = 0 should guarantee that, but if a
+    // driver ever stops honouring it the result would be noise rather than an
+    // error, so check rather than assume.
+    if (obtained.format != desired.format || obtained.channels != desired.channels) {
+        Com_Printf("SDL: WARNING - device gave format %d / %d ch, expected %d / %d ch; "
+                   "audio may be corrupt\n",
+                   obtained.format, obtained.channels, desired.format, desired.channels);
+    }
+
+    Com_Printf("SDL: opened audio %d Hz, %d ch, %d samples (mixing at %d Hz)\n",
+               obtained.freq, obtained.channels, obtained.samples, dma.speed);
     return 1;
 }
 

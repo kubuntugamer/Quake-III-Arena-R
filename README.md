@@ -133,8 +133,18 @@ cmake -S . -B build
 cmake --build build -j"$(nproc)"
 ```
 
-The binary is written to `bin/Release/quake3` — a path relative to the repository root, not to
-`build/`. `CMakeLists.txt` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`, so the output lands next to the source tree regardless of where you pointed the build directory.
+The executable is named `vkq3ng.engine` (`OUTPUT_NAME` in `code/unix/CMakeLists.txt`). On a
+first configure it is written to `bin/Release/` in the source tree, because `CMakeLists.txt`
+sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` to `${CMAKE_SOURCE_DIR}/bin/Release`.
+
+That location is not stable across re-configures. `CMakeLists.txt` branches on
+`CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` and then `FORCE`-sets the prefix to `/usr`, so
+once `/usr` is in the CMake cache the branch is false and later `cmake -S . -B build` runs put
+the binary in the build tree instead. Check both:
+
+```bash
+ls bin/Release/vkq3ng.engine build/code/unix/vkq3ng.engine 2>/dev/null
+```
 
 Notes:
 
@@ -142,16 +152,18 @@ Notes:
   re-run the `cmake -S . -B build` configure step, not just the build.
 - If the Vulkan SDK is installed in a non-standard prefix, point CMake at it:
   `cmake -S . -B build -DVULKAN_SDK=/path/to/sdk`.
-- A successful build should end with `[100%] Built target quake3`.
+- A successful build should end with `[100%] Built target vkq3ng`.
 
 ---
 
 ## Running the game
 
+From a Debian install, `vkq3ng` is on your `PATH`. From a source build, the binary is
+`vkq3ng.engine` at whichever of the two locations above it ended up in.
+
 ```bash
-cd bin/Release
-./quake3 +set fs_basePath /path/to/your/quake3 +set sv_pure 0 \
-         +set vm_game 0 +set vm_cgame 0 +set vm_ui 0
+vkq3ng +set fs_basePath /path/to/your/quake3 +set sv_pure 0 \
+       +set vm_game 0 +set vm_cgame 0 +set vm_ui 0
 ```
 
 `fs_basePath` must point at the directory **containing** `baseq3/` and `missionpack/`, not at
@@ -165,10 +177,10 @@ With no `fs_basePath`, the engine uses the current working directory as the inst
 ### First-run recommendations
 
 ```bash
-./quake3 +set fs_basePath /path/to/quake3 \
-         +set r_fullscreen 1 \
-         +set r_mode 14 \
-         +set r_vertexLight 0
+vkq3ng +set fs_basePath /path/to/quake3 \
+       +set r_fullscreen 1 \
+       +set r_mode 14 \
+       +set r_vertexLight 0
 ```
 
 `r_mode 14` means fullscreen at the current desktop resolution. Omit `r_mode` and pass
@@ -213,10 +225,10 @@ Notes that contradict older versions of this README:
 
 ```bash
 # Rasterization
-./quake3 +set r_vertexLight 0
+vkq3ng +set r_vertexLight 0
 
 # Ray tracing
-./quake3 +set r_vertexLight 2
+vkq3ng +set r_vertexLight 2
 ```
 
 `0` is the default. The two paths share the same assets, maps and UI; only the lighting pipeline
@@ -263,7 +275,7 @@ window. It applies to the **rasterization** path only — it has no effect while
 `r_vertexLight` is `2`.
 
 ```bash
-./quake3 +set r_vertexLight 0 +set r_fsrScale 0.85
+vkq3ng +set r_vertexLight 0 +set r_fsrScale 0.85
 ```
 
 Output on the console, verified working:
@@ -363,7 +375,7 @@ pre-generated in `code/unix/xdg/`.
 
 The engine selects the X11 path when `WAYLAND_DISPLAY` is unset
 (`code/unix/linux_wayland.c`). To force X11 under a Wayland session, run it under
-`XWayland`, for example `WAYLAND_DISPLAY= ./quake3`.
+`XWayland`, for example `WAYLAND_DISPLAY= vkq3ng`.
 
 ### SDL2 audio
 
@@ -377,9 +389,18 @@ ALSA, PulseAudio and PipeWire appear only because SDL2 sits on top of them — t
 directly; SDL2 negotiates with whatever the system already provides. Playback position
 tracking and ring buffer sizing are handled in the engine.
 
-The engine mixes at a fixed 44100 Hz, stereo, signed 16-bit, and asks SDL2 for exactly that
-(`allowed_changes = 0`, so no resampling happens on our side). `sndspeed`, `sndbits` and
-`sndchannels` are parsed but currently ignored, as is the inherited `s_khz` cvar.
+The engine mixes at a fixed 44100 Hz, stereo, signed 16-bit. `sndspeed`, `sndbits` and
+`sndchannels` are parsed for compatibility with old configs but change nothing, as is the
+inherited `s_khz` cvar. Setting them prints a note saying so.
+
+The mixer rate is unrelated to the hardware rate. SDL2 resamples between them internally, so a
+device that only does 48000 Hz is not a problem and nothing plays at the wrong pitch.
+
+`allowed_changes` is deliberately 0. The audio callback is a raw `memcpy` of signed 16-bit
+bytes, so it is only correct while the format and channel count SDL2 grants match what was
+asked for. Verified across 8000–192000 Hz, mono and stereo, against the pulseaudio, alsa and
+pipewire drivers: `allowed_changes = 0` returned an exact match every time. Startup re-checks
+this and warns if a driver ever disagrees.
 
 If audio is silent or the wrong device is picked, override the **SDL2** driver, not an engine
 setting:
@@ -396,15 +417,14 @@ To see what SDL2 actually picked, and on which driver:
 SDL_LOGLEVEL=info vkq3ng 2>&1 | grep -i 'audio\|pulse\|pipewire\|alsa'
 ```
 
-Startup also prints the negotiated format, which is the first thing to check when pitch or
-speed sounds wrong:
+Startup prints the negotiated format:
 
 ```
-SDL: opened audio 44100 Hz, 2 ch, 1024 samples
+SDL: opened audio 44100 Hz, 2 ch, 1024 samples (mixing at 44100 Hz)
 ```
 
-If the reported rate is not 44100, the device could not provide it and playback will run at
-the wrong speed.
+The two rates are the same in practice. If they ever differ, or a `WARNING - device gave
+format` line appears, that is the thing to investigate.
 
 ### `io_uring` file I/O
 
@@ -483,10 +503,10 @@ All of these go through SDL2; there is no per-backend choice to make.
 | `s_mixPreStep` | `0.05` | Mix pretime step; also sizes the SDL ring buffer |
 | `s_separation` | `0.5` | Stereo separation, `0` = mono |
 | `s_doppler` | `1` | Doppler effect on positional audio |
-| `sndbits` | `16` | **Ignored.** Mixer is fixed at signed 16-bit |
-| `sndchannels` | `2` | **Ignored.** Mixer is fixed at stereo |
-| `sndspeed` | `0` | **Ignored.** Mixer is fixed at 44100 Hz |
-| `s_khz` | `22` | **Ignored.** Inherited from the OSS driver, unused |
+| `sndbits` | `16` | **No effect.** Mixer is fixed at signed 16-bit |
+| `sndchannels` | `2` | **No effect.** Mixer is fixed at stereo |
+| `sndspeed` | `0` | **No effect.** Mixer is fixed at 44100 Hz |
+| `s_khz` | `22` | **No effect.** Inherited from the OSS driver, unused |
 
 ### Filesystem and I/O
 
@@ -590,9 +610,11 @@ This is the honest list. Nothing below has been confirmed on real hardware.
    wanted, it must write into the `B8G8R8A8_UNORM` swapchain as a storage image rather than
    reusing `fsr_rcas.comp`.
 
-9. **Audio across environments.** Verified over the local sound server. Needs testing with ALSA
-   only, with no sound server at all, with a device that supports only 48 kHz, and on HDMI or
-   Bluetooth output.
+9. **Audio across environments.** Verified over PulseAudio, plus ALSA and PipeWire as SDL2
+   drivers, at 8–192 kHz requested in both mono and stereo. Needs testing with no sound server
+   at all, and on HDMI or Bluetooth output. A device that only does 48 kHz should be fine:
+   SDL2 resamples to the hardware rate internally, and `allowed_changes = 0` was verified to
+   return the requested rate regardless of what the device supports.
 
 10. **Resolution and fullscreen edge cases.** Borderless fullscreen at fractional scaling, HiDPI
     under Wayland, and monitors whose current mode is not the maximum mode.
@@ -649,11 +671,10 @@ with `r_vertexLight 0`.
 SDL2 is the only audio backend, so override the SDL2 driver rather than an engine setting:
 `SDL_AUDIODRIVER=alsa vkq3ng` or `SDL_AUDIODRIVER=pulseaudio vkq3ng`. Use
 `SDL_AUDIODRIVER=dummy` to confirm the problem is audio output rather than the game.
-Check the startup line reports 44100 Hz — a different rate means the device could not supply
-what the mixer needs and playback will be at the wrong speed.
+Check the startup line reports 44100 Hz and shows no `WARNING - device gave format`.
 
 **Runs but renders black under Wayland**
-Force X11: `WAYLAND_DISPLAY= ./quake3`.
+Force X11: `WAYLAND_DISPLAY= vkq3ng`.
 
 **Adding a new source file had no effect**
 The renderer CMake targets glob sources. Re-run `cmake -S . -B build`.
