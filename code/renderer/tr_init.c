@@ -1525,8 +1525,14 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	R_DoneFreeType();
 
 	// shut down platform specific OpenGL/Vulkan stuff
-	if (destroyWindow) {
-			VK_DestroyBuffer(&vk_d.indexbuffer);
+	if (destroyWindow && vk.device != VK_NULL_HANDLE) {
+		// Device-dependent teardown must be skipped when the Vulkan device was
+		// never created (e.g. VK_CreateInstance or physical-device selection
+		// failed during a fatal R_Init). The device-level function pointers
+		// vkDestroyImage/vkQueueWaitIdle are only resolved by
+		// VK_LoadDeviceFunctions, which runs after the device exists, so calling
+		// them here dereferences NULL and segfaults. Guard on the device handle.
+		VK_DestroyBuffer(&vk_d.indexbuffer);
 			VK_DestroyBuffer(&vk_d.vertexbuffer);
 			VK_DestroyBuffer(&vk_d.normalbuffer);
 			VK_DestroyBuffer(&vk_d.uvbuffer1);
