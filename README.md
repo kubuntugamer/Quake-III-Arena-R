@@ -313,12 +313,21 @@ Two separate concerns, frequently conflated:
 
 Eligibility for a second compute device, as currently implemented:
 
-| Laptop combination | Second device used? |
-|---|---|
-| AMD APU + AMD discrete | Yes |
-| Intel Arc iGPU + NVIDIA discrete | Yes |
-| Intel UHD / Iris Xe + NVIDIA discrete | No — iGPU lacks RT, so single-GPU |
-| Single GPU | No |
+| Laptop combination | Second device used? | Why |
+|---|---|---|
+| AMD APU + AMD discrete | Yes | Both present and RT-capable |
+| Intel Arc iGPU + NVIDIA discrete | Yes | iGPU has RT; it may be headless, which is now allowed |
+| Intel UHD / Iris Xe + NVIDIA discrete | No | iGPU has no raytracing extensions |
+| Single GPU | No | Nothing else to use |
+
+A GPU that cannot present is still eligible for the compute slot. On a muxless hybrid the
+display belongs to the discrete GPU, so the on-board iGPU has no queue family with surface
+support — that no longer disqualifies it. `r_multiGPU 2` restores the stricter behaviour if a
+second GPU that also presents is required. Startup says `(headless)` when that is what was
+picked.
+
+The compute slot ranks raytracing support above device class, because doing raytracing is the
+only job it has. A discrete part without RT will not displace an integrated part that has it.
 
 On Mesa, GPU selection can be overridden without touching this code. The
 `VK_LAYER_MESA_device_select` layer ships with Mesa and honours `MESA_VK_DEVICE_SELECT`
@@ -360,16 +369,42 @@ The engine selects the X11 path when `WAYLAND_DISPLAY` is unset
 
 **Status: working, replaces the OSS driver.**
 
-`code/unix/linux_snd.c` routes audio through SDL2, so it works over PipeWire, PulseAudio and ALSA
-instead of requiring the removed `/dev/dsp` interface. Playback position tracking and ring buffer
-sizing are handled in the engine.
+SDL2 is the **only** audio backend. `code/unix/linux_snd.c` opens one SDL2 audio device and
+mixes into it; there is no separate ALSA or PulseAudio path in this codebase.
 
-If audio is silent or the wrong device is chosen:
+ALSA, PulseAudio and PipeWire appear only because SDL2 sits on top of them — they are SDL2
+*drivers*, chosen by SDL2 and not by the engine. On a normal desktop you install none of them
+directly; SDL2 negotiates with whatever the system already provides. Playback position
+tracking and ring buffer sizing are handled in the engine.
+
+The engine mixes at a fixed 44100 Hz, stereo, signed 16-bit, and asks SDL2 for exactly that
+(`allowed_changes = 0`, so no resampling happens on our side). `sndspeed`, `sndbits` and
+`sndchannels` are parsed but currently ignored, as is the inherited `s_khz` cvar.
+
+If audio is silent or the wrong device is picked, override the **SDL2** driver, not an engine
+setting:
 
 ```bash
-SDL_AUDIODRIVER=alsa ./quake3      # bypass PipeWire/PulseAudio
-SDL_AUDIODRIVER=pulseaudio ./quake3
+SDL_AUDIODRIVER=alsa vkq3ng        # bypass PipeWire/PulseAudio
+SDL_AUDIODRIVER=pulseaudio vkq3ng
+SDL_AUDIODRIVER=dummy vkq3ng       # discard output, useful for isolating the problem
 ```
+
+To see what SDL2 actually picked, and on which driver:
+
+```bash
+SDL_LOGLEVEL=info vkq3ng 2>&1 | grep -i 'audio\|pulse\|pipewire\|alsa'
+```
+
+Startup also prints the negotiated format, which is the first thing to check when pitch or
+speed sounds wrong:
+
+```
+SDL: opened audio 44100 Hz, 2 ch, 1024 samples
+```
+
+If the reported rate is not 44100, the device could not provide it and playback will run at
+the wrong speed.
 
 ### `io_uring` file I/O
 
@@ -402,6 +437,7 @@ whether this is a win on any real system.
 | `r_fsrScale` | `0` | Render scale for the raster path; `0` disables |
 | `r_mode` | `3` | Resolution mode; `14` = fullscreen at desktop resolution |
 | `r_fullscreen` | `1` | Fullscreen toggle |
+| `r_multiGPU` | `0` | Second-GPU policy: `0` auto (a headless raytracing device is allowed), `1` never, `2` only if the second device can also present |
 
 ### Ray tracing
 
@@ -434,6 +470,23 @@ whether this is a win on any real system.
 | `rt_aiTSR` | `0` | **Stub, no effect** |
 | `rt_aiASPredict` | `0` | **Stub, no effect** |
 | `rt_aiMaterial` | `0` | **Stub, no effect** |
+
+### Audio
+
+All of these go through SDL2; there is no per-backend choice to make.
+
+| Cvar | Default | Description |
+|---|---|---|
+| `s_volume` | `1` | Master volume |
+| `s_musicvolume` | `1` | Music volume |
+| `s_mixahead` | `0.2` | Seconds of audio buffered ahead |
+| `s_mixPreStep` | `0.05` | Mix pretime step; also sizes the SDL ring buffer |
+| `s_separation` | `0.5` | Stereo separation, `0` = mono |
+| `s_doppler` | `1` | Doppler effect on positional audio |
+| `sndbits` | `16` | **Ignored.** Mixer is fixed at signed 16-bit |
+| `sndchannels` | `2` | **Ignored.** Mixer is fixed at stereo |
+| `sndspeed` | `0` | **Ignored.** Mixer is fixed at 44100 Hz |
+| `s_khz` | `22` | **Ignored.** Inherited from the OSS driver, unused |
 
 ### Filesystem and I/O
 
@@ -561,7 +614,9 @@ This is the honest list. Nothing below has been confirmed on real hardware.
 
 - **AI upscaling and denoising do nothing.** The cvars are present and default to `0`; the code
   path is never initialised.
-- **The second GPU is created but unused.** Multi-GPU compute is not implemented.
+- **The second GPU is created but unused.** A second device is now selected and created in more
+  cases than before (headless raytracing parts are eligible), but nothing submits work to it.
+  Multi-GPU compute is still not implemented; see `code/renderer/ai/ai_pipeline.c`.
 - **FSR is a bilinear upscale, not AMD FSR 1.**
 
 - **Game data is not included.** `pak0.pk3` must come from your own purchase.
@@ -591,7 +646,11 @@ immediately, so you get a segfault with no useful message. Copy the folder into 
 with `r_vertexLight 0`.
 
 **No sound**
-Try `SDL_AUDIODRIVER=alsa` or `SDL_AUDIODRIVER=pulseaudio`.
+SDL2 is the only audio backend, so override the SDL2 driver rather than an engine setting:
+`SDL_AUDIODRIVER=alsa vkq3ng` or `SDL_AUDIODRIVER=pulseaudio vkq3ng`. Use
+`SDL_AUDIODRIVER=dummy` to confirm the problem is audio output rather than the game.
+Check the startup line reports 44100 Hz — a different rate means the device could not supply
+what the mixer needs and playback will be at the wrong speed.
 
 **Runs but renders black under Wayland**
 Force X11: `WAYLAND_DISPLAY= ./quake3`.
