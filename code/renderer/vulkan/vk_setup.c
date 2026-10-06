@@ -1,8 +1,13 @@
 
 #include "../tr_local.h"
+#include "vk_devselect.h"
 
 vkinstance_t vk;
 vkdata_t     vk_d;
+
+// How aggressively to use a second GPU. 0 auto, 1 never, 2 only if the second
+// device can also present. Registered in R_Init.
+static cvar_t *com_multiGPU;
 
 // Needed to present anything at all.
 static const char* requiredDeviceExtensions[] = {
@@ -125,11 +130,21 @@ static qboolean VK_IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surfac
 static qboolean VK_CheckValidationLayerSupport();
 static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device);
 
+// Defined further down, used by VK_DescribeDevice() which sits above them.
+static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device);
+static qboolean VK_HasDeviceExtension(VkPhysicalDevice device, const char* name);
+
 void VK_Setup(void* p1, void* p2) {
     if (!VK_LoadGlobalFunctions()) return;
     VK_CreateInstance();
     if (!VK_LoadInstanceFunctions()) return;
     VK_CreateSurface(p1, p2);
+
+    // Read the second-GPU policy before the device is picked. A +set on the
+    // command line is already applied by this point; a config file value is
+    // too, because Com_StartupVariable ran during Com_Init.
+    com_multiGPU = ri.Cvar_Get("r_multiGPU", "0", CVAR_ARCHIVE);
+
     VK_PickPhysicalDevice();
     VK_CreateLogicalDevice();
     if (!VK_LoadDeviceFunctions()) return;
@@ -314,6 +329,79 @@ static int VK_DeviceRank( VkPhysicalDevice device, const VkPhysicalDevicePropert
 	return typeRank * 4 + memRank;
 }
 
+// Reduces a VkPhysicalDevice to the plain facts vk_devselect.c reasons about.
+// This is the only place the selection policy touches the Vulkan API, which is
+// what lets the policy itself be unit tested without a loader or a GPU.
+static void VK_DescribeDevice( VkPhysicalDevice device, vkdevcand_t *out )
+{
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(device, &props);
+
+	memset(out, 0, sizeof(*out));
+	out->name = props.deviceName;
+
+	switch (props.deviceType) {
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   out->type = VKDEVTYPE_DISCRETE; break;
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: out->type = VKDEVTYPE_INTEGRATED; break;
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    out->type = VKDEVTYPE_VIRTUAL; break;
+		case VK_PHYSICAL_DEVICE_TYPE_CPU:            out->type = VKDEVTYPE_CPU; break;
+		default:                                      out->type = VKDEVTYPE_OTHER; break;
+	}
+
+	out->deviceLocalMemory = VK_DeviceLocalMemorySize(device);
+
+	// Queue families: record whether any graphics or compute queue exists, and
+	// whether any of them can present to our surface.
+	uint32_t familyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, NULL);
+	VkQueueFamilyProperties *families = NULL;
+	if (familyCount) {
+		families = (VkQueueFamilyProperties *)malloc(familyCount * sizeof(VkQueueFamilyProperties));
+		if (families) {
+			vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families);
+			for (uint32_t i = 0; i < familyCount; i++) {
+				if (families[i].queueCount == 0) {
+					continue;
+				}
+				if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+					out->hasGraphicsQueue = 1;
+				}
+				if (families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+					out->hasComputeQueue = 1;
+				}
+				VkBool32 presentSupport = VK_FALSE;
+				vkGetPhysicalDeviceSurfaceSupportKHR(device, i, vk.surface, &presentSupport);
+				if (presentSupport) {
+					out->canPresent = 1;
+				}
+			}
+			free(families);
+		}
+	}
+
+	if (out->canPresent) {
+		swapChainSupportDetails_t sc = querySwapChainSupport(device, vk.surface);
+		out->swapchainAdequate = (sc.formatCount && sc.presentModeCount);
+	}
+
+	out->requiredExts = VK_CheckDeviceExtensionSupport(device) ? 1 : 0;
+
+	// RT support is reported independently of VK_RayTracingActive(). A device
+	// may be turned away today for want of RT but still be the better choice for
+	// the compute slot once the RT path is switched on.
+	out->rayTracingExts = 1;
+	for (int i = 0; i < (int)(sizeof(rayTracingDeviceExtensions) / sizeof(rayTracingDeviceExtensions[0])); i++) {
+		if (!VK_HasDeviceExtension(device, rayTracingDeviceExtensions[i])) {
+			out->rayTracingExts = 0;
+			break;
+		}
+	}
+
+	out->externalMemoryFd    = VK_HasDeviceExtension(device, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+	out->externalSemaphoreFd = VK_HasDeviceExtension(device, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+	out->externalFenceFd     = VK_HasDeviceExtension(device, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME);
+}
+
 static void VK_PickPhysicalDevice()
 {
 	uint32_t deviceCount = 0;
@@ -333,49 +421,42 @@ static void VK_PickPhysicalDevice()
 		ri.Error(ERR_FATAL, "Vulkan: failed to enumerate GPUs!");
 	}
 
-	// Keep the two best devices that can actually present to our surface. Any
-	// further device is ignored - including software rasterisers, which the
-	// loader happily reports alongside real hardware.
-	VkPhysicalDevice best = VK_NULL_HANDLE, next = VK_NULL_HANDLE;
-	int bestRank = -1, nextRank = -1;
-
-	for (uint32_t i = 0; i < deviceCount; i++) {
-		VkPhysicalDeviceProperties props;
-		vkGetPhysicalDeviceProperties(devices[i], &props);
-
-		if (!VK_IsDeviceSuitable(devices[i], vk.surface)) {
-			continue;
-		}
-
-		int rank = VK_DeviceRank(devices[i], &props);
-		if (rank > bestRank) {
-			next = best; nextRank = bestRank;	// old winner slides into the compute slot
-			best = devices[i]; bestRank = rank;
-		} else if (rank > nextRank) {
-			next = devices[i]; nextRank = rank;
-		}
+	// Describe every device, then let the policy in vk_devselect.c decide. The
+	// policy deliberately accepts a headless device for the compute slot.
+	vkdevcand_t *cands = (vkdevcand_t *)malloc(deviceCount * sizeof(vkdevcand_t));
+	if (cands == NULL) {
+		free(devices);
+		ri.Error(ERR_FATAL, "Vulkan: out of memory describing GPUs!");
 	}
-
-	free(devices);
+	for (uint32_t i = 0; i < deviceCount; i++) {
+		VK_DescribeDevice(devices[i], &cands[i]);
+	}
 
 	// The second GPU only serves raytracing compute, so there is no point
 	// enumerating for one when RT is off.
-	if (!VK_RayTracingActive()) {
-		next = VK_NULL_HANDLE;
-	}
-
-	// Never hand raytracing a CPU device - a software Vulkan target is far slower
-	// than simply staying single-GPU.
-	if (next != VK_NULL_HANDLE) {
-		VkPhysicalDeviceProperties np;
-		vkGetPhysicalDeviceProperties(next, &np);
-		if (np.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
-			next = VK_NULL_HANDLE;
+	vkmultigpu_t policy = VK_MULTIGPU_AUTO;
+	if (com_multiGPU) {
+		if (com_multiGPU->integer == 1) {
+			policy = VK_MULTIGPU_OFF;
+		} else if (com_multiGPU->integer == 2) {
+			policy = VK_MULTIGPU_STRICT;
 		}
 	}
+	if (!VK_RayTracingActive() && policy == VK_MULTIGPU_AUTO) {
+		policy = VK_MULTIGPU_OFF;
+	}
 
-	vk.physicalDevice = best;
-	vk.secondaryPhysicalDevice = next;
+	vkdevselect_t sel;
+	const int selRc = VK_DevSelect(cands, (int)deviceCount, policy, &sel);
+
+	free(cands);
+
+	vk.physicalDevice = (sel.primary == VK_DEVSELECT_NONE)
+		? VK_NULL_HANDLE : devices[sel.primary];
+	vk.secondaryPhysicalDevice = (sel.secondary == VK_DEVSELECT_NONE)
+		? VK_NULL_HANDLE : devices[sel.secondary];
+
+	free(devices);
 
 	if (vk.physicalDevice != VK_NULL_HANDLE) {
 		// VK_IsDeviceSuitable() caches the queue family indices of whichever
@@ -385,14 +466,33 @@ static void VK_PickPhysicalDevice()
 		VK_IsDeviceSuitable(vk.physicalDevice, vk.surface);
 	}
 
-	if (vk.physicalDevice != VK_NULL_HANDLE) {
+	if (selRc == 0) {
 		VkPhysicalDeviceProperties chosen;
 		vkGetPhysicalDeviceProperties(vk.physicalDevice, &chosen);
 		if (vk.secondaryPhysicalDevice != VK_NULL_HANDLE) {
 			VkPhysicalDeviceProperties second;
 			vkGetPhysicalDeviceProperties(vk.secondaryPhysicalDevice, &second);
-			ri.Printf(PRINT_ALL, "Vulkan: graphics on %s, raytracing compute on %s\n",
-				chosen.deviceName, second.deviceName);
+			// A headless second device has no present family. Say so, because
+			// otherwise the log looks like a bug rather than a decision.
+			VkQueueFamilyProperties secondFamilies[8];
+			uint32_t secondFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice,
+				&secondFamilyCount, NULL);
+			qboolean secondCanPresent = qfalse;
+			if (secondFamilyCount > 0) {
+				if (secondFamilyCount > 8) secondFamilyCount = 8;
+				vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice,
+					&secondFamilyCount, secondFamilies);
+				for (uint32_t i = 0; i < secondFamilyCount; i++) {
+					VkBool32 ps = VK_FALSE;
+					vkGetPhysicalDeviceSurfaceSupportKHR(vk.secondaryPhysicalDevice, i,
+						vk.surface, &ps);
+					if (ps) { secondCanPresent = qtrue; break; }
+				}
+			}
+			ri.Printf(PRINT_ALL, "Vulkan: graphics on %s, raytracing compute on %s%s\n",
+				chosen.deviceName, second.deviceName,
+				secondCanPresent ? "" : " (headless)");
 		} else {
 			ri.Printf(PRINT_ALL, "Vulkan: graphics on %s (no second GPU for compute)\n",
 				chosen.deviceName);

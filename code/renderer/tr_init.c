@@ -1173,6 +1173,9 @@ void R_Register( void )
 	r_vertexLight = ri.Cvar_Get( "r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_rtx = ri.Cvar_Get("r_rtx", "0", CVAR_ARCHIVE | CVAR_LATCH);
 	r_fsrScale = ri.Cvar_Get("r_fsrScale", "0", CVAR_ARCHIVE | CVAR_LATCH);
+	// Second-GPU policy. 0 auto (a headless raytracing device is allowed),
+	// 1 never, 2 only if the second device can also present.
+	ri.Cvar_Get("r_multiGPU", "0", CVAR_ARCHIVE);
 	r_uiFullScreen = ri.Cvar_Get( "r_uifullscreen", "0", 0);
 	r_subdivisions = ri.Cvar_Get ("r_subdivisions", "4", CVAR_ARCHIVE | CVAR_LATCH);
 	
