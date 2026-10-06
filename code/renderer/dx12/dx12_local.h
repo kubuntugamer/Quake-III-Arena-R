@@ -104,6 +104,23 @@ typedef struct {
 
     // Debug
     void (*SetDebugName)(qhandle_t handle, const char* name);
+    
+    // Input
+    void (*KeyDown)(int key);
+    void (*KeyUp)(int key);
+    void (*MouseButtonDown)(int button);
+    void (*MouseButtonUp)(int button);
+    void (*MouseMove)(int x, int y);
+    void (*MouseWheel)(int delta);
+    
+    qboolean (*GetKey)(int key);
+    qboolean (*GetKeyDown)(int key);
+    qboolean (*GetKeyUp)(int key);
+    qboolean (*GetMouseButton)(int button);
+    void (*GetMouseDelta)(int* dx, int* dy);
+    int (*GetMouseWheel)(void);
+    
+    float (*GetDeltaTime)(void);
 } dx12RendererAPI_t;
 
 // Global API instance
@@ -113,5 +130,38 @@ extern dx12RendererAPI_t dx12RendererAPI;
 dx12Device_t* DX12_GetDevice(void);
 dx12Swapchain_t* DX12_GetSwapchain(void);
 dx12CommandContext_t* DX12_GetCommandContext(int frameIndex);
+
+// Acceleration structures
+dx12AccelerationStructure_t* DX12_CreateBottomLevelAS(UINT numGeometries, const D3D12_RAYTRACING_GEOMETRY_DESC* geometries);
+dx12AccelerationStructure_t* DX12_CreateTopLevelAS(UINT numInstances, const D3D12_RAYTRACING_INSTANCE_DESC* instances);
+void DX12_UpdateTopLevelAS(dx12AccelerationStructure_t* as, UINT numInstances, const D3D12_RAYTRACING_INSTANCE_DESC* instances);
+D3D12_GPU_VIRTUAL_ADDRESS DX12_GetAccelerationStructureGPUVA(dx12AccelerationStructure_t* as);
+void DX12_CleanupAccelerationStructures(void);
+
+// Ray tracing pipeline
+dx12RayTracingPipeline_t* DX12_CreateRayTracingPipeline(
+    const char* rayGenSource, const char* missSource, const char* closestHitSource,
+    const char* anyHitSource, const char* intersectionSource,
+    UINT numRayGen, UINT numMiss, UINT numHitGroups,
+    const D3D12_ROOT_SIGNATURE* globalRootSig, const D3D12_ROOT_SIGNATURE* localRootSig);
+void DX12_DispatchRays(dx12RayTracingPipeline_t* pipeline, UINT width, UINT height, UINT depth);
+void DX12_CleanupRayTracingPipelines(void);
+
+// Input functions
+void DX12_KeyDown(int key);
+void DX12_KeyUp(int key);
+void DX12_MouseButtonDown(int button);
+void DX12_MouseButtonUp(int button);
+void DX12_MouseMove(int x, int y);
+void DX12_MouseWheel(int delta);
+
+qboolean DX12_GetKey(int key);
+qboolean DX12_GetKeyDown(int key);
+qboolean DX12_GetKeyUp(int key);
+qboolean DX12_GetMouseButton(int button);
+void DX12_GetMouseDelta(int* dx, int* dy);
+int DX12_GetMouseWheel(void);
+
+float DX12_GetDeltaTime(void);
 
 #endif // __DX12_LOCAL_H__

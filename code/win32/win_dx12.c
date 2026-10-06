@@ -5,10 +5,12 @@ Win32 Platform Layer for DX12
 */
 #include "../qcommon/q_shared.h"
 #include "../renderer/dx12/dx12_local.h"
+#include "../renderer/dx12/dx12_main.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <stdio.h>
 
 // Window state
 static HWND g_hwnd = NULL;
@@ -25,14 +27,14 @@ void Win32_InitWindow(int width, int height, BOOL fullscreen);
 void Win32_ShutdownWindow(void);
 void Win32_ProcessEvents(void);
 void Win32_SetWindowTitle(const char* title);
+void Win32_ParseCommandLine(LPWSTR cmdLine);
 
 // Main entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     g_hInstance = hInstance;
     
-    // Parse command line for window settings
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    // TODO: Parse args for -width, -height, -fullscreen, -novsync
+    // Parse command line
+    Win32_ParseCommandLine(GetCommandLineW());
     
     // Initialize window
     Win32_InitWindow(g_windowWidth, g_windowHeight, g_fullscreen);
@@ -84,6 +86,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     Win32_ShutdownWindow();
     
     return 0;
+}
+
+void Win32_ParseCommandLine(LPWSTR cmdLine) {
+    // Simple command line parsing for -width, -height, -fullscreen, -novsync
+    // This is a simplified version - a full implementation would use CommandLineToArgvW
+    char cmdLineA[4096];
+    WideCharToMultiByte(CP_UTF8, 0, cmdLine, -1, cmdLineA, sizeof(cmdLineA), NULL, NULL);
+    
+    char* token = strtok(cmdLineA, " ");
+    while (token) {
+        if (strcmp(token, "-width") == 0) {
+            token = strtok(NULL, " ");
+            if (token) g_windowWidth = atoi(token);
+        } else if (strcmp(token, "-height") == 0) {
+            token = strtok(NULL, " ");
+            if (token) g_windowHeight = atoi(token);
+        } else if (strcmp(token, "-fullscreen") == 0) {
+            g_fullscreen = TRUE;
+        } else if (strcmp(token, "-novsync") == 0) {
+            g_vsync = FALSE;
+        }
+        token = strtok(NULL, " ");
+    }
 }
 
 void Win32_InitWindow(int width, int height, BOOL fullscreen) {
@@ -182,7 +207,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-            // Handle key input
+            if (wParam < 512) {
+                DX12_KeyDown((int)wParam);
+            }
             if (wParam == VK_ESCAPE) {
                 PostQuitMessage(0);
                 g_running = FALSE;
@@ -191,19 +218,50 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
         case WM_KEYUP:
         case WM_SYSKEYUP:
+            if (wParam < 512) {
+                DX12_KeyUp((int)wParam);
+            }
             return 0;
             
         case WM_MOUSEMOVE:
+            DX12_MouseMove(LOWORD(lParam), HIWORD(lParam));
+            return 0;
+            
         case WM_LBUTTONDOWN:
+            DX12_MouseButtonDown(0);
+            SetCapture(hwnd);
+            return 0;
+            
         case WM_LBUTTONUP:
+            DX12_MouseButtonUp(0);
+            ReleaseCapture();
+            return 0;
+            
         case WM_RBUTTONDOWN:
+            DX12_MouseButtonDown(1);
+            SetCapture(hwnd);
+            return 0;
+            
         case WM_RBUTTONUP:
+            DX12_MouseButtonUp(1);
+            ReleaseCapture();
+            return 0;
+            
+        case WM_MBUTTONDOWN:
+            DX12_MouseButtonDown(2);
+            SetCapture(hwnd);
+            return 0;
+            
+        case WM_MBUTTONUP:
+            DX12_MouseButtonUp(2);
+            ReleaseCapture();
+            return 0;
+            
         case WM_MOUSEWHEEL:
-            // Handle mouse input
+            DX12_MouseWheel(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA);
             return 0;
             
         case WM_GETMINMAXINFO:
-            // Prevent window from being sized too small
             {
                 MINMAXINFO* mmi = (MINMAXINFO*)lParam;
                 mmi->ptMinTrackSize.x = 640;
@@ -214,6 +272,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_ACTIVATEAPP:
             // Handle focus loss/gain
             return 0;
+            
+        case WM_SETCURSOR:
+            // Hide cursor in game
+            if (LOWORD(lParam) == HTCLIENT) {
+                SetCursor(NULL);
+                return TRUE;
+            }
+            break;
     }
     
     return DefWindowProc(hwnd, msg, wParam, lParam);
