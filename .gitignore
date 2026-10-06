@@ -1,3 +1,29 @@
+# --- Generated build products ---
+build/
+build-*/
+release/
+*.pk3
+__pycache__/
+*.pyc
+
+# Engine (submodule-internal) build trees live under engine/build*; the
+# submodule already ignores these, but be explicit about accidental symlinks:
+# (no root-level engine/ copy needed under the submodule)
+
+# --- Generated map artifacts (keep the generated .map; BSP/SRF are output) ---
+*.bsp
+*.srf
+
+# --- Test artifacts ---
+maps/test*.map
+maps/test_plane*
+XMLDump.xml
+*.log
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*~
 # Build directories
 build*/
 build_*/
@@ -38,3 +64,9 @@ qconsole.log
 
 # NetRadiant package
 netradiant-q3map2_*.deb
+
+# Generated texture output (regenerate with process_textures.py)
+textures/rt_showcase/_compiled/
+
+# Vendored third-party projects (separate upstreams, not part of this repo)
+dx12_base/
