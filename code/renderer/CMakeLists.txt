@@ -1,6 +1,11 @@
 # SOURCE AND HEADER FILES
 # add all src files and create file hierarchy for IDE
-file(GLOB_RECURSE SOURCES *.cpp *.c *.m *.mm *.hpp *.h)
+# Explicitly exclude dx12 directory
+file(GLOB SOURCES
+    *.cpp *.c *.m *.mm *.hpp *.h
+    vulkan/*.cpp vulkan/*.c vulkan/*.h
+    ai/*.cpp ai/*.c ai/*.h
+)
 
 list(APPEND SOURCES "../game/q_math.c")
 
