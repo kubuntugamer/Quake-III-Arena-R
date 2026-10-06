@@ -648,7 +648,10 @@ This is the honest list. Nothing below has been confirmed on real hardware.
   path is never initialised.
 - **The second GPU is created but unused.** A second device is now selected and created in more
   cases than before (headless raytracing parts are eligible), but nothing submits work to it.
-  Multi-GPU compute is still not implemented; see `code/renderer/ai/ai_pipeline.c`.
+  Multi-GPU compute is still not implemented; see `code/renderer/ai/ai_pipeline.c`. Until it is,
+  cross-device handle export (`VK_KHR_external_memory_fd` and friends) is reported at startup if
+  either device lacks it, rather than being required — refusing would reject devices for a
+  capability nothing uses yet.
 - **FSR is a bilinear upscale, not AMD FSR 1.**
 
 - **Game data is not included.** `pak0.pk3` must come from your own purchase.

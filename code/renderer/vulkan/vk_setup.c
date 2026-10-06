@@ -133,6 +133,10 @@ static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device);
 // Defined further down, used by VK_DescribeDevice() which sits above them.
 static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device);
 static qboolean VK_HasDeviceExtension(VkPhysicalDevice device, const char* name);
+// Also defined below. The primary device fills the shared enabledDeviceExtensions
+// list; the secondary device gets its own so it is never handed extensions the
+// primary advertises and it does not.
+static int VK_BuildDeviceExtensions(VkPhysicalDevice device, const char** dst);
 
 void VK_Setup(void* p1, void* p2) {
     if (!VK_LoadGlobalFunctions()) return;
@@ -641,7 +645,15 @@ static void VK_CreateLogicalDevice()
 		// Find compute queue family on secondary device
 		uint32_t secQueueCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice, &secQueueCount, NULL);
+		if (secQueueCount == 0) {
+			ri.Printf(PRINT_WARNING, "Multi-GPU: secondary device reports no queue families, skipping it\n");
+			return;
+		}
 		VkQueueFamilyProperties* secQueueProps = malloc(secQueueCount * sizeof(VkQueueFamilyProperties));
+		if (secQueueProps == NULL) {
+			ri.Printf(PRINT_WARNING, "Multi-GPU: out of memory reading secondary queue families\n");
+			return;
+		}
 		vkGetPhysicalDeviceQueueFamilyProperties(vk.secondaryPhysicalDevice, &secQueueCount, secQueueProps);
 		
 		int secComputeFamily = -1;
@@ -665,24 +677,83 @@ static void VK_CreateLogicalDevice()
 			float queuePriority = 1.0f;
 			secQueueInfo.pQueuePriorities = &queuePriority;
 			
-			// Reuse the same feature chain as primary device
+			// The secondary needs its own extension list. Handing it the
+			// primary's list fails on any cross-vendor hybrid, because the
+			// dGPU's vendor extensions are not present on the iGPU.
+			const char *secExtensions[VK_MAX_ENABLED_DEVICE_EXTENSIONS];
+			const int secExtensionCount =
+				VK_BuildDeviceExtensions(vk.secondaryPhysicalDevice, secExtensions);
+
+			// Likewise its own feature chain. The primary's chain names
+			// presentId/presentWait feature structs that only exist because the
+			// primary advertises VK_EXT_present_id and VK_EXT_present_wait, and
+			// naming a feature struct for an extension the device lacks is
+			// invalid usage that fails vkCreateDevice. Only the raytracing
+			// features are relevant here; the selection policy already required
+			// the matching extensions, and this device presents nothing.
+			VkPhysicalDeviceVulkan12Features secVulkan12 = { 0 };
+			secVulkan12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+			secVulkan12.bufferDeviceAddress = qtrue;
+
+			VkPhysicalDeviceAccelerationStructureFeaturesKHR secAccel = { 0 };
+			secAccel.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+			secAccel.accelerationStructure = qtrue;
+			secAccel.pNext = &secVulkan12;
+
+			VkPhysicalDeviceRayTracingPipelineFeaturesKHR secRTPipeline = { 0 };
+			secRTPipeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+			secRTPipeline.rayTracingPipeline = qtrue;
+			secRTPipeline.pNext = &secAccel;
+
+			VkPhysicalDeviceFeatures2 secFeatures = { 0 };
+			secFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
+			secFeatures.pNext = &secRTPipeline;
+
 			VkDeviceCreateInfo secDesc = {0};
 			secDesc.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-			secDesc.pNext = &device_features;  // reuse the same feature chain
+			secDesc.pNext = &secFeatures;
 			secDesc.queueCreateInfoCount = 1;
 			secDesc.pQueueCreateInfos = &secQueueInfo;
 			secDesc.pEnabledFeatures = NULL;
-			secDesc.enabledExtensionCount = enabledDeviceExtensionCount;
-			secDesc.ppEnabledExtensionNames = &enabledDeviceExtensions[0];
-			
+			secDesc.enabledExtensionCount = secExtensionCount;
+			secDesc.ppEnabledExtensionNames = secExtensions;
+
 			VkResult res = vkCreateDevice(vk.secondaryPhysicalDevice, &secDesc, NULL, &vk.secondaryDevice);
 			if (res == VK_SUCCESS) {
 				vk.secondaryComputeFamily = secComputeFamily;
 				vkGetDeviceQueue(vk.secondaryDevice, secComputeFamily, 0, &vk.secondaryComputeQueue);
 				vkGetPhysicalDeviceProperties(vk.secondaryPhysicalDevice, &vk.secondaryDeviceProperties);
 				vk.multiGPUEnabled = qtrue;
-				ri.Printf(PRINT_ALL, "Multi-GPU: Secondary device %s (compute queue family %d) enabled\n", 
+				ri.Printf(PRINT_ALL, "Multi-GPU: Secondary device %s (compute queue family %d) enabled\n",
 					vk.secondaryDeviceProperties.deviceName, secComputeFamily);
+
+				// Cross-device work means sharing buffers and synchronising across
+				// two devices, which needs the external-memory, -semaphore and
+				// -fence handle extensions on *both* devices. Nothing is
+				// submitted to the second device yet, so this is a warning and
+				// not a refusal, but say it plainly rather than letting it show
+				// up later as a validation error or silent corruption.
+				const char *xdev[3] = {
+					VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+					VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+					VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
+				};
+				const char *xdevLabel[3] = { "external memory fd", "external semaphore fd", "external fence fd" };
+				int missingXdev = 0;
+				for (int i = 0; i < 3; i++) {
+					if (!VK_HasDeviceExtension(vk.secondaryPhysicalDevice, xdev[i])) {
+						ri.Printf(PRINT_WARNING, "Multi-GPU: secondary device lacks %s\n", xdevLabel[i]);
+						missingXdev = 1;
+					}
+					if (!VK_HasDeviceExtension(vk.physicalDevice, xdev[i])) {
+						ri.Printf(PRINT_WARNING, "Multi-GPU: primary device lacks %s\n", xdevLabel[i]);
+						missingXdev = 1;
+					}
+				}
+				if (missingXdev) {
+					ri.Printf(PRINT_WARNING, "Multi-GPU: sharing work between these two GPUs will not work "
+						"until cross-device handle export is supported by both.\n");
+				}
 			} else {
 				ri.Printf(PRINT_WARNING, "Failed to create secondary device: %d\n", res);
 			}
@@ -863,31 +934,75 @@ static qboolean VK_CheckDeviceExtensionSupport(VkPhysicalDevice device) {
 	return qtrue;
 }
 
-// Fill the final enabled extension list for the picked device: everything
-// required plus whichever optional extensions the driver offers.
-static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
-	enabledDeviceExtensionCount = 0;
-	for (int i = 0; i < (int)(sizeof(requiredDeviceExtensions) / sizeof(requiredDeviceExtensions[0])); i++) {
-		enabledDeviceExtensions[enabledDeviceExtensionCount++] = requiredDeviceExtensions[i];
+// Append every entry of `list` that `device` actually supports to `dst`.
+// Shared by the primary and secondary paths so neither can end up enabling an
+// extension the device does not have, which fails vkCreateDevice outright.
+static int VK_AppendSupportedExtensions(VkPhysicalDevice device, const char* const* list,
+                                        int listCount, const char** dst, int dstCount) {
+	for (int i = 0; i < listCount; i++) {
+		if (dstCount >= VK_MAX_ENABLED_DEVICE_EXTENSIONS) {
+			break;
+		}
+		if (VK_HasDeviceExtension(device, list[i])) {
+			dst[dstCount++] = list[i];
+		}
 	}
+	return dstCount;
+}
+
+// Build a complete, self-contained extension list for one specific physical
+// device: whatever it requires, plus the RT extensions when RT is in use, plus
+// whichever optional extensions it supports.
+//
+// This exists because the secondary device used to be handed the primary's
+// list. On a cross-vendor hybrid - Intel iGPU alongside an NVIDIA or AMD dGPU,
+// which is the common hybrid laptop - that passed the dGPU's vendor extensions
+// to the iGPU, and vkCreateDevice failed with VK_ERROR_EXTENSION_NOT_PRESENT,
+// leaving multi-GPU silently disabled. Note the required list includes
+// VK_KHR_swapchain, which a headless compute device has no use for but which
+// VK_CheckDeviceExtensionSupport already confirmed it supports.
+static int VK_BuildDeviceExtensions(VkPhysicalDevice device, const char** dst) {
+	int count = 0;
+
+	count = VK_AppendSupportedExtensions(device,
+		requiredDeviceExtensions,
+		(int)(sizeof(requiredDeviceExtensions) / sizeof(requiredDeviceExtensions[0])),
+		dst, count);
+
 	// Only enable RT extensions when RT is in use - enabling an extension the
 	// device does not support makes vkCreateDevice fail.
 	if (VK_RayTracingActive()) {
-		for (int i = 0; i < (int)(sizeof(rayTracingDeviceExtensions) / sizeof(rayTracingDeviceExtensions[0])); i++) {
-			enabledDeviceExtensions[enabledDeviceExtensionCount++] = rayTracingDeviceExtensions[i];
-		}
+		count = VK_AppendSupportedExtensions(device,
+			rayTracingDeviceExtensions,
+			(int)(sizeof(rayTracingDeviceExtensions) / sizeof(rayTracingDeviceExtensions[0])),
+			dst, count);
 	}
+
+	count = VK_AppendSupportedExtensions(device,
+		optionalDeviceExtensions,
+		(int)(sizeof(optionalDeviceExtensions) / sizeof(optionalDeviceExtensions[0])),
+		dst, count);
+
+	return count;
+}
+
+// Fill the final enabled extension list for the picked device: everything
+// required plus whichever optional extensions the driver offers.
+static void VK_FillEnabledDeviceExtensions(VkPhysicalDevice device) {
+	enabledDeviceExtensionCount = VK_BuildDeviceExtensions(device, enabledDeviceExtensions);
 	vk.rtMaintenance1 = qfalse;
 	vk.rtPositionFetch = qfalse;
 	vk.swapchainMaintenance1 = qfalse;
 	vk.presentId = qfalse;
 	vk.presentWait = qfalse;
+	// The list itself was built above. This pass only records which of those
+	// optional extensions are in play, because the renderer gates code on the
+	// vk.* flags and those describe the primary device only. Safe to key off
+	// support rather than actual list membership because the builder cannot hit
+	// VK_MAX_ENABLED_DEVICE_EXTENSIONS - 39 extensions in total against a limit
+	// of 256 - so nothing is ever dropped for space.
 	for (int i = 0; i < (int)(sizeof(optionalDeviceExtensions) / sizeof(optionalDeviceExtensions[0])); i++) {
-		if (enabledDeviceExtensionCount >= VK_MAX_ENABLED_DEVICE_EXTENSIONS) {
-			break;
-		}
 		if (VK_HasDeviceExtension(device, optionalDeviceExtensions[i])) {
-			enabledDeviceExtensions[enabledDeviceExtensionCount++] = optionalDeviceExtensions[i];
 			if (!strcmp(optionalDeviceExtensions[i], VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME)) {
 				vk.rtMaintenance1 = qtrue;
 			}
