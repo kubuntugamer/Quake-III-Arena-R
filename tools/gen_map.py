@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate maps/rt_showcase.map for netradiant-q3map2.
+Generate maps/showcase.map for netradiant-q3map2.
 
 Why this exists
 ---------------
@@ -27,7 +27,7 @@ Consequently a room is not one brush. It is a shell of wall brushes placed
 *outside* the volume you want to walk in, leaving the interior open and
 connected to the outside world through doorways.
 
-Running this script rewrites maps/rt_showcase.map. The output is committed, so
+Running this script rewrites maps/showcase.map. The output is committed, so
 Python is only needed when the layout changes.
 """
 
@@ -39,11 +39,11 @@ WALL = 64          # wall thickness
 DOOR_HALF = 64     # doorway half-width
 DOOR_TOP = 192     # doorway lintel height
 
-CONCRETE = "rt_showcase/concrete_damaged"
-METAL = "rt_showcase/metal_brushed"
-GLASS = "rt_showcase/glass_clean"
-PORTAL = "rt_showcase/portal"
-SKY = "rt_showcase/sky_environment"
+CONCRETE = "showcase/concrete_damaged"
+METAL = "showcase/metal_brushed"
+GLASS = "showcase/glass_clean"
+PORTAL = "showcase/portal"
+SKY = "showcase/sky_environment"
 
 # The engine classifies ray-traced materials from the shader NAME and the
 # standard `sort` keyword, not from shader directives. See RB_GetMaterial() in
@@ -57,8 +57,8 @@ SKY = "rt_showcase/sky_environment"
 #
 # MATERIAL_KIND_LAVA is defined but never assigned, so a lava surface is
 # ordinary diffuse geometry to the ray tracer.
-WATER = "rt_showcase/textures/liquids/calm_poollight"
-MIRROR = "rt_showcase/metal_mirror"
+WATER = "showcase/textures/liquids/calm_poollight"
+MIRROR = "showcase/metal_mirror"
 
 # Interior (walkable) extents of each space: x0, y0, z0, x1, y1, z1
 ROOMS = {
@@ -383,9 +383,9 @@ def build():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate the rt_showcase map.")
-    ap.add_argument("-o", "--output", default="maps/rt_showcase.map",
-                    help="file to write (default: maps/rt_showcase.map)")
+    ap = argparse.ArgumentParser(description="Generate the showcase map.")
+    ap.add_argument("-o", "--output", default="maps/showcase.map",
+                    help="file to write (default: maps/showcase.map)")
     ap.add_argument("--stdout", action="store_true",
                     help="print to stdout instead of writing a file")
     args = ap.parse_args()

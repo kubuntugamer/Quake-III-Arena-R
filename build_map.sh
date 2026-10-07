@@ -6,7 +6,7 @@ set -euo pipefail
 # Compiles map, processes textures, creates .pk3, installs for testing
 # ============================================================================
 
-MAP_NAME="rt_showcase"
+MAP_NAME="showcase"
 GAME_DIR="${GAME_DIR:-baseq3}"
 BUILD_DIR="build/${MAP_NAME}"
 PK3_NAME="${MAP_NAME}.pk3"
@@ -62,19 +62,19 @@ python3 tools/gen_map.py -o "maps/${MAP_NAME}.map"
 echo ""
 echo "[2/6] Staging assets into ${BASEQ3_PATH}..."
 mkdir -p "${BASEQ3_PATH}/maps"
-mkdir -p "${BASEQ3_PATH}/textures/rt_showcase"
+mkdir -p "${BASEQ3_PATH}/textures/showcase"
 mkdir -p "${BASEQ3_PATH}/scripts"
 
-cp -r textures/rt_showcase/_compiled/. "${BASEQ3_PATH}/textures/rt_showcase/" 2>/dev/null || true
-cp scripts/rt_showcase.shader "${BASEQ3_PATH}/scripts/"
+cp -r textures/showcase/_compiled/. "${BASEQ3_PATH}/textures/showcase/" 2>/dev/null || true
+cp scripts/showcase.shader "${BASEQ3_PATH}/scripts/"
 
 # q3map2 only parses the .shader files named in shaderlist.txt. Without this
 # entry the shader script is invisible to both q3map2 and the engine, and every
 # surface falls back to an unnamed default shader.
 SHADERLIST="${BASEQ3_PATH}/scripts/shaderlist.txt"
-if ! grep -qxF "rt_showcase" "${SHADERLIST}" 2>/dev/null; then
+if ! grep -qxF "showcase" "${SHADERLIST}" 2>/dev/null; then
     touch "${SHADERLIST}"
-    echo "rt_showcase" >> "${SHADERLIST}"
+    echo "showcase" >> "${SHADERLIST}"
 fi
 
 # ----------------------------------------------------------------------------
@@ -137,23 +137,23 @@ echo ""
 echo "[5/6] Creating ${PK3_NAME}..."
 cd ../..
 mkdir -p "release/${GAME_DIR}/maps"
-mkdir -p "release/${GAME_DIR}/textures/rt_showcase"
+mkdir -p "release/${GAME_DIR}/textures/showcase"
 mkdir -p "release/${GAME_DIR}/scripts"
 
 cp "${BUILD_DIR}/${MAP_NAME}.bsp" "release/${GAME_DIR}/maps/"
-cp -r textures/rt_showcase/_compiled/* "release/${GAME_DIR}/textures/rt_showcase/" 2>/dev/null || true
-cp scripts/rt_showcase.shader "release/${GAME_DIR}/scripts/"
-cp config/rt_showcase.cfg "release/${GAME_DIR}/"
+cp -r textures/showcase/_compiled/* "release/${GAME_DIR}/textures/showcase/" 2>/dev/null || true
+cp scripts/showcase.shader "release/${GAME_DIR}/scripts/"
+cp config/showcase.cfg "release/${GAME_DIR}/"
 
 # Ship a shaderlist.txt that references our shader script. A .pk3 that carries
 # the .shader but no shaderlist entry loads nothing: the file sits in the
 # archive, unread.
 SHADERLIST="release/${GAME_DIR}/scripts/shaderlist.txt"
-if ! grep -qxF "rt_showcase" "${SHADERLIST}" 2>/dev/null; then
+if ! grep -qxF "showcase" "${SHADERLIST}" 2>/dev/null; then
     if [ ! -f "${SHADERLIST}" ]; then
         : > "${SHADERLIST}"
     fi
-    echo "rt_showcase" >> "${SHADERLIST}"
+    echo "showcase" >> "${SHADERLIST}"
 fi
 
 # Rebuild the archive from scratch. `zip -r` on an existing pk3 appends and
@@ -201,7 +201,7 @@ echo ""
 echo "Test commands:"
 echo "  Raster:  ${VKQ3NG_BIN} +set fs_basePath ${BASEQ3_PATH} +set r_vertexLight 0 +map ${MAP_NAME}"
 echo "  RT:      ${VKQ3NG_BIN} +set fs_basePath ${BASEQ3_PATH} +set r_vertexLight 2 +set rt_numSamples 4 +set rt_accumulate 1 +map ${MAP_NAME}"
-echo "  Config:  ${VKQ3NG_BIN} +set fs_basePath ${BASEQ3_PATH} +exec rt_showcase.cfg +map ${MAP_NAME}"
+echo "  Config:  ${VKQ3NG_BIN} +set fs_basePath ${BASEQ3_PATH} +exec showcase.cfg +map ${MAP_NAME}"
 echo ""
 echo "In-game screenshot: bind a key to 'screenshot' or use console:"
 echo "  screenshot ${MAP_NAME}_rt"

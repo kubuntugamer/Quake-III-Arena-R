@@ -69,4 +69,3 @@ netradiant-q3map2_*.deb
 textures/rt_showcase/_compiled/
 
 # Vendored third-party projects (separate upstreams, not part of this repo)
-dx12_base/

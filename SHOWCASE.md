@@ -11,10 +11,10 @@ vkq3ng-showcase/
 ├── dx12_base/        # Submodule: standalone DirectX 12 renderer skeleton (kubuntugamer/dx12-base)
 ├── build_map.sh      # The whole pipeline: textures → map → stage → compile → package → verify
 ├── process_textures.py   # PBR → Q3-compatible textures (TGA + mips), placeholders by default
-├── tools/gen_map.py      # Generates maps/rt_showcase.map in the format q3map2 expects
-├── maps/rt_showcase.map  # Generated map (committed for readability)
-├── scripts/rt_showcase.shader  # Q3 shader script for the materials
-├── config/rt_showcase.cfg      # vkq3ng RT configuration
+├── tools/gen_map.py      # Generates maps/showcase.map in the format q3map2 expects
+├── maps/showcase.map  # Generated map (committed for readability)
+├── scripts/showcase.shader  # Q3 shader script for the materials
+├── config/showcase.cfg      # vkq3ng RT configuration
 └── release/          # Build output (gitignored)
 ```
 
@@ -41,19 +41,19 @@ bash build_map.sh
 ```
 
 This stages the generated map and textures into the game profile, compiles the
-BSP (`build/rt_showcase/`), runs the raster light stage, copies the BSP into
-the game dir, and packages everything into `rt_showcase.pk3` with a
+BSP (`build/showcase/`), runs the raster light stage, copies the BSP into
+the game dir, and packages everything into `showcase.pk3` with a
 `shaderlist.txt` that actually loads the custom materials.
 
 ## Running
 
 ```bash
 # Raster path tracing off; legacy lighting
-engine/bin/vkq3ng.engine +set fs_basePath ~/.local/share/q3rtx +set r_vertexLight 0 +map rt_showcase
+engine/bin/vkq3ng.engine +set fs_basePath ~/.local/share/q3rtx +set r_vertexLight 0 +map showcase
 
 # RT path
 engine/bin/vkq3ng.engine +set fs_basePath ~/.local/share/q3rtx +set r_vertexLight 2 \
-    +set rt_numSamples 4 +set rt_accumulate 1 +map rt_showcase
+    +set rt_numSamples 4 +set rt_accumulate 1 +map showcase
 ```
 
 > Note: on a machine without a working Vulkan/GPU setup the engine reaches
@@ -69,7 +69,7 @@ is checked in so it can be read and diffed without running Python.
 
 Materials are classified for the ray tracer by shader name/standard `sort`
 keyword (`RB_GetMaterial()` in `engine/code/renderer/tr_material.c`). The
-script in `scripts/rt_showcase.shader` deliberately uses names such as
+script in `scripts/showcase.shader` deliberately uses names such as
 `.../glass_clean`, `.../textures/liquids/calm_poollight`, `.../metal_mirror`
 and `.../portal` so the rooms exercise distinct RT material behaviours:
 refraction (glass), liquid shading (water), planar reflection (mirror) and

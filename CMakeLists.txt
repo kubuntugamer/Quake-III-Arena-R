@@ -29,31 +29,23 @@ set(Q3_ARGUMENTS "")
 set(CMAKE_SUPPRESS_REGENERATION true)
 
 # Platform detection
-if (WIN32)
-    set(PLATFORM_WINDOWS 1)
-    message(STATUS "Platform: Windows")
-    # Find DX12 dependencies
-    find_package(DX12 REQUIRED)
-    find_package(DXC REQUIRED)
-else()
-    set(PLATFORM_LINUX 1)
-    message(STATUS "Platform: Linux")
-    # Linux/Unix only - Vulkan + X11/Wayland
-    find_package(X11 REQUIRED)
-    if (X11_FOUND)
-        message(STATUS "Found X11")
-    endif (X11_FOUND)
+# Vulkan renderer (always evaluated; platform‑agnostic)
+set(PLATFORM_LINUX 1)
+message(STATUS "Platform: Linux (cross‑compile to Windows)")
+find_package(X11 REQUIRED)
+if (X11_FOUND)
+    message(STATUS "Found X11")
+endif (X11_FOUND)
 
-    # Vulkan
-    find_package(Vulkan REQUIRED)
-    find_path(VULKAN_INCLUDE_DIR NAMES vulkan/vulkan.h HINTS
-        "$ENV{VULKAN_SDK}/include")
-    if (VULKAN_FOUND)
-        message(STATUS "Found Vulkan: ${Vulkan_VERSION}")
-    else(VULKAN_FOUND)
-        message(STATUS "Vulkan not found")
-    endif (VULKAN_FOUND)
-endif()
+# Vulkan
+find_package(Vulkan REQUIRED HINTS
+    "$ENV{VULKAN_SDK_PATH}/lib"
+    "$ENV{VULKAN_SDK_PATH}/include")
+if (VULKAN_FOUND)
+    message(STATUS "Found Vulkan: ${Vulkan_VERSION}")
+else(VULKAN_FOUND)
+    message(FATAL_ERROR "Vulkan SDK not found – set VULKAN_SDK_PATH")
+endif (VULKAN_FOUND)
 
 # Renderer backend selection
 option(BUILD_VULKAN_RENDERER "Build Vulkan renderer" ON)
